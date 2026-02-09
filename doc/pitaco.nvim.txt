@@ -1,4 +1,4 @@
-*pitaco.nvim.txt*           For NVIM v0.8.0          Last change: 2025 July 10
+*pitaco.nvim.txt*         For NVIM v0.8.0        Last change: 2026 February 09
 
 ==============================================================================
 Table of Contents                              *pitaco.nvim-table-of-contents*
@@ -44,6 +44,7 @@ To install Pitaco, use your preferred Neovim plugin manager. For example, with
         dependencies = {
             'nvim-lua/plenary.nvim',
             'j-hui/fidget.nvim',
+            'MunifTanjim/nui.nvim',
         },
         config = function()
             require('pitaco').setup({
@@ -57,7 +58,8 @@ To install Pitaco, use your preferred Neovim plugin manager. For example, with
 
 Then, restart Neovim and run `:Lazy install`.
 
-Pitaco has the following dependencies: - `nvim-lua/plenary.nvim` - `curl`
+Pitaco has the following dependencies: - `nvim-lua/plenary.nvim` -
+`MunifTanjim/nui.nvim` - `curl`
 
 
 USAGE 🛠️            *pitaco.nvim-pitaco-neovim-plugin-🚀-usage-🛠️*
