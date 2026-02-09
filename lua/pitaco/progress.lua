@@ -15,10 +15,12 @@ function M.stop()
 	progress_state.total_requests = 0
 	progress_state.message = ""
 
-  vim.api.nvim_exec_autocmds("User", {
-    pattern = "PitacoProgressStop",
-    modeline = false,
-  })
+	vim.schedule(function()
+		vim.api.nvim_exec_autocmds("User", {
+			pattern = "PitacoProgressStop",
+			modeline = false,
+		})
+	end)
 end
 
 function M.update(message, current_request, total_requests)
@@ -28,17 +30,19 @@ function M.update(message, current_request, total_requests)
 	progress_state.total_requests = total_requests
 	progress_state.message = message
 
-	vim.api.nvim_exec_autocmds("User", {
-		pattern = "PitacoProgressUpdate",
-		modeline = false,
-		data = {
-			message = message,
-			current_request = current_request,
-			total_requests = total_requests,
-			percentage = progress_state.percentage,
-	     running = progress_state.running,
-		}
-	})
+	vim.schedule(function()
+		vim.api.nvim_exec_autocmds("User", {
+			pattern = "PitacoProgressUpdate",
+			modeline = false,
+			data = {
+				message = message,
+				current_request = current_request,
+				total_requests = total_requests,
+				percentage = progress_state.percentage,
+				running = progress_state.running,
+			},
+		})
+	end)
 end
 
 function M.get_state()

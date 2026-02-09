@@ -20,6 +20,7 @@ require('lazy').setup({
     dependencies = {
         'nvim-lua/plenary.nvim',
         'j-hui/fidget.nvim',
+        'MunifTanjim/nui.nvim',
     },
     config = function()
         require('pitaco').setup({
@@ -35,6 +36,7 @@ Then, restart Neovim and run `:Lazy install`.
 
 Pitaco has the following dependencies:
 - `nvim-lua/plenary.nvim`
+- `MunifTanjim/nui.nvim`
 - `curl`
 
 ## Usage 🛠️
@@ -46,6 +48,7 @@ Once installed, you can use the following commands to interact with Pitaco:
 - `:Pitaco clear` - Clear the current review.
 - `:Pitaco clearLine` - Clear the current review for the current line.
 - `:Pitaco comment` - Add a comment under the current line with the Pitaco diagnostics summary.
+- `:Pitaco commit` - Generate a commit message from git changes and confirm the commit.
 - `:Pitaco health` - Check if Pitaco is properly configured.
 
 ## Configuration ⚙️
@@ -80,6 +83,7 @@ require('pitaco').setup({
     language = "english",
     additional_instruction = nil,
     split_threshold = 100,
+    commit_keymap = "<leader>at", -- Optional mapping for :Pitaco commit
 })
 ```
 
@@ -97,6 +101,11 @@ See example below of those options:
 -- Example of a mapping to show the diagnostics in the current line
 vim.keymap.set("n", "<leader>do", vim.diagnostic.open_float)
 ````
+
+```lua
+-- Example mapping for the Pitaco commit command
+vim.keymap.set("n", "<leader>at", "<cmd>Pitaco commit<CR>", { desc = "Pitaco commit" })
+```
 
 ```lua
 -- Example of better diagnostics on buffer with icons and colors

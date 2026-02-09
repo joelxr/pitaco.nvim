@@ -16,6 +16,10 @@ pitaco.setup()
 
 local commands = require("pitaco.commands")
 
+if vim.g.pitaco_commit_keymap ~= nil and vim.g.pitaco_commit_keymap ~= "" then
+	vim.keymap.set("n", vim.g.pitaco_commit_keymap, "<cmd>Pitaco commit<CR>", { desc = "Pitaco commit" })
+end
+
 -- Main Pitaco command with subcommands for review, clear, clearLine, and health
 vim.api.nvim_create_user_command("Pitaco", function(opts)
 	local action = opts.fargs[1] or "review" -- Default to 'review' if no subcommand is given
@@ -30,12 +34,14 @@ vim.api.nvim_create_user_command("Pitaco", function(opts)
 		health.check()
 	elseif action == "comment" then
 		commands.comment()
+	elseif action == "commit" then
+		commands.commit()
 	else
 		vim.notify("Invalid Pitaco command: " .. action, vim.log.levels.ERROR)
 	end
 end, {
 	nargs = "*", -- Allows for subcommands
 	complete = function() -- Autocomplete suggestions
-		return { "review", "clear", "clearLine", "health", "comment" }
+		return { "review", "clear", "clearLine", "health", "comment", "commit" }
 	end,
 })

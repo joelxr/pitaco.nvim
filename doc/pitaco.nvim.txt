@@ -69,6 +69,7 @@ Once installed, you can use the following commands to interact with Pitaco:
 - `:Pitaco clear` - Clear the current review.
 - `:Pitaco clearLine` - Clear the current review for the current line.
 - `:Pitaco comment` - Add a comment under the current line with the Pitaco diagnostics summary.
+- `:Pitaco commit` - Generate a commit message from git changes and confirm the commit.
 - `:Pitaco health` - Check if Pitaco is properly configured.
 
 
@@ -108,6 +109,7 @@ file:
         language = "english",
         additional_instruction = nil,
         split_threshold = 100,
+        commit_keymap = "<leader>at", -- Optional mapping for :Pitaco commit
     })
 <
 
@@ -128,6 +130,11 @@ See example below of those options:
 >lua
     -- Example of a mapping to show the diagnostics in the current line
     vim.keymap.set("n", "<leader>do", vim.diagnostic.open_float)
+<
+
+>lua
+    -- Example mapping for the Pitaco commit command
+    vim.keymap.set("n", "<leader>at", "<cmd>Pitaco commit<CR>", { desc = "Pitaco commit" })
 <
 
 >lua

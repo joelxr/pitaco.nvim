@@ -24,6 +24,16 @@ local function check_curl()
   return false
 end
 
+local function check_nui()
+  local has_nui, _ = pcall(require, "nui")
+  if not has_nui then
+    vim.health.error("nui.nvim is required but not installed")
+    return false
+  end
+  vim.health.ok("nui.nvim is installed")
+  return true
+end
+
 local function check_provider_config()
   local provider = require("pitaco.config").get_provider()
   if not provider or provider == "" then
@@ -38,6 +48,7 @@ function M.check()
   vim.health.start("Pitaco.nvim health check")
   
   check_plenary()
+  check_nui()
   check_curl()
   check_provider_config()
 end

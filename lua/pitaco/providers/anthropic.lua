@@ -13,20 +13,20 @@ function M.get_api_key()
 end
 
 function M.get_model()
-	local model = vim.g.pitaco_anthropic_model_id
+	local config = require("pitaco.config")
+	return config.get_anthropic_model()
+end
 
-	if model ~= nil then
-		return model
-	end
+function M.build_chat_request(system_prompt, messages, max_tokens)
+	local model = M.get_model()
+	local request_table = {
+		model = model,
+		messages = messages or {},
+		max_tokens = max_tokens or 256,
+		system = system_prompt or "",
+	}
 
-	if vim.g.pitaco_anthropic_model_id_complained == nil then
-		local message =
-			"No model specified. Please set anthropic_model_id in the setup table. Using default value for now"
-		vim.fn.confirm(message, "&OK", 1, "Warning")
-		vim.g.pitaco_anthropic_model_id_complained = 1
-	end
-
-	return "claude-3-haiku-20240307" -- Default Anthropic model
+	return vim.json.encode(request_table)
 end
 
 function M.prepare_requests(messages)
@@ -163,6 +163,14 @@ function M.parse_response(response)
 	end
 
 	return diagnostics
+end
+
+function M.extract_text(response)
+	if response == nil or response.content == nil or response.content[1] == nil then
+		return ""
+	end
+
+	return response.content[1].text or ""
 end
 
 return M

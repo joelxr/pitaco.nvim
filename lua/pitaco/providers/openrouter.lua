@@ -17,6 +17,30 @@ function M.get_model()
 	return config.get_openrouter_model()
 end
 
+function M.build_chat_request(system_prompt, messages, max_tokens)
+	local model = M.get_model()
+	local final_messages = {}
+
+	if system_prompt ~= nil and system_prompt ~= "" then
+		table.insert(final_messages, { role = "system", content = system_prompt })
+	end
+
+	for _, message in ipairs(messages or {}) do
+		table.insert(final_messages, message)
+	end
+
+	local request_table = {
+		model = model,
+		messages = final_messages,
+	}
+
+	if max_tokens ~= nil then
+		request_table.max_tokens = max_tokens
+	end
+
+	return vim.json.encode(request_table)
+end
+
 function M.prepare_requests(messages)
 	local config = require("pitaco.config")
 	local utils = require("pitaco.utils")
@@ -147,6 +171,14 @@ function M.parse_response(response)
 	end
 
 	return diagnostics
+end
+
+function M.extract_text(response)
+	if response == nil or response.choices == nil or response.choices[1] == nil then
+		return ""
+	end
+
+	return response.choices[1].message.content or ""
 end
 
 return M

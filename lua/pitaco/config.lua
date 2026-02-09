@@ -32,6 +32,19 @@ Your commentary must fit on a single line
 	return vim.g.pitaco_system_prompt or default_system_prompt
 end
 
+function M.get_commit_system_prompt()
+	local default_commit_system_prompt = [[
+You are a Git commit message generator.
+Given a git diff, write a concise commit subject line.
+Rules:
+- Output only the subject line, no quotes, no markdown.
+- Use imperative mood.
+- Keep it between 50 and 72 characters.
+- No trailing period.
+  ]]
+	return vim.g.pitaco_commit_system_prompt or default_commit_system_prompt
+end
+
 function M.get_language()
 	return vim.g.pitaco_language
 end
@@ -115,7 +128,7 @@ function M.get_anthropic_model()
 		vim.g.pitaco_anthropic_model_id_complained = 1
 	end
 
-	return "claude-v1"
+	return "claude-3-haiku-20240307"
 end
 
 return M

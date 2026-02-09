@@ -5,6 +5,7 @@ local config = require("pitaco.config")
 local utils = require("pitaco.utils")
 local requests = require("pitaco.requests")
 local fewshot = require("pitaco.fewshot")
+local commit = require("pitaco.commit")
 local namespace = vim.api.nvim_create_namespace("pitaco")
 
 function M.review()
@@ -64,6 +65,10 @@ function M.comment()
 	vim.api.nvim_buf_set_lines(buffer_number, cursor_line, cursor_line, false, comment_lines)
 
 	vim.notify("Added " .. #comment_lines .. " comment lines with diagnostics summary", vim.log.levels.INFO)
+end
+
+function M.commit()
+	commit.run()
 end
 
 return M

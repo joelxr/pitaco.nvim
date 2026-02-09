@@ -10,6 +10,8 @@ local default_opts = {
 	language = "english",
 	additional_instruction = nil,
 	split_threshold = 100,
+	commit_keymap = nil,
+	commit_system_prompt = nil,
 }
 
 function M.setup(opts)
@@ -23,6 +25,8 @@ function M.setup(opts)
 	vim.g.pitaco_language = opts.language
 	vim.g.pitaco_additional_instruction = opts.additional_instruction
 	vim.g.pitaco_split_threshold = opts.split_threshold
+	vim.g.pitaco_commit_keymap = opts.commit_keymap
+	vim.g.pitaco_commit_system_prompt = opts.commit_system_prompt
 end
 
 return M
