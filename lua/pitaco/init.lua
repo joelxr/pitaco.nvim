@@ -1,8 +1,8 @@
 local M = {}
 
 local default_opts = {
-	anthropic_model_id = "claude-3-5-haiku-latest",
-	openai_model_id = "gpt-4.1-mini",
+	anthropic_model_id = "claude-haiku-4-5",
+	openai_model_id = "gpt-5-mini",
 	openrouter_model_id = "openrouter/deepseek/deepseek-chat-v3-0324:free",
 	ollama_model_id = "llama3.1",
 	ollama_url = "http://localhost:11434",

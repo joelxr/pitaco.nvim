@@ -128,7 +128,7 @@ function M.get_anthropic_model()
 		vim.g.pitaco_anthropic_model_id_complained = 1
 	end
 
-	return "claude-3-haiku-20240307"
+	return "claude-haiku-4-5"
 end
 
 return M
