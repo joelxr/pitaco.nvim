@@ -54,7 +54,7 @@ local function check_nui()
     return true
   end
 
-  vim.health.warn("nui.nvim is not available; commit UI will fall back to built-in windows")
+  vim.health.warn("nui.nvim is not available; commit UI falls back and :Pitaco models is unavailable")
   return false
 end
 

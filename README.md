@@ -40,7 +40,7 @@ Pitaco has the following dependencies:
 - `curl`
 
 Optional dependency:
-- `MunifTanjim/nui.nvim` (used for an enhanced `:Pitaco commit` UI, with fallback if missing)
+- `MunifTanjim/nui.nvim` (required for `:Pitaco models`, and used for an enhanced `:Pitaco commit` UI with fallback if missing)
 
 ## Usage 🛠️
 
@@ -53,6 +53,7 @@ Once installed, you can use the following commands to interact with Pitaco:
 - `:Pitaco comment` - Add a comment under the current line with the Pitaco diagnostics summary.
 - `:Pitaco commit` - Generate a commit message from git changes and confirm the commit.
 - `:Pitaco health` - Run Pitaco checks with `:checkhealth pitaco`.
+- `:Pitaco models` - Open a model picker and switch provider/model on the fly.
 
 ## Configuration ⚙️
 
@@ -92,8 +93,22 @@ require('pitaco').setup({
     additional_instruction = nil,
     split_threshold = 100,
     commit_keymap = "<leader>at", -- Optional mapping for :Pitaco commit
+    persist_model_selection = true, -- Save :Pitaco models selection in state file
 })
 ```
+
+`persist_model_selection` stores selected provider/model in:
+- `stdpath("state") .. "/pitaco-model-state.json"`
+
+The model picker discovers models from provider APIs (with default fallback when needed), including:
+- provider readiness (key configured / ollama reachable)
+- plan and per-1M pricing when available
+- balance when available (for OpenRouter credits)
+- NUI modal picker with model status and metadata per entry
+- picker keys:
+  - `/` search/filter models
+  - `c` clear search
+  - `j`/`k` or arrows to navigate, `Enter` to select
 
 ### Health checks
 

@@ -6,6 +6,7 @@ local utils = require("pitaco.utils")
 local requests = require("pitaco.requests")
 local fewshot = require("pitaco.fewshot")
 local commit = require("pitaco.commit")
+local model_picker = require("pitaco.model_picker")
 local namespace = vim.api.nvim_create_namespace("pitaco")
 
 function M.review()
@@ -69,6 +70,10 @@ end
 
 function M.commit()
 	commit.run()
+end
+
+function M.models()
+	model_picker.open()
 end
 
 return M
