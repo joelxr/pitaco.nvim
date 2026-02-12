@@ -10,7 +10,6 @@ end
 vim.g.loaded_pitaco = true
 
 local pitaco = require("pitaco")
-local health = require("pitaco.health")
 
 pitaco.setup()
 
@@ -31,7 +30,7 @@ vim.api.nvim_create_user_command("Pitaco", function(opts)
 	elseif action == "clearLine" then
 		commands.clear_line()
 	elseif action == "health" then
-		health.check()
+		vim.cmd("checkhealth pitaco")
 	elseif action == "comment" then
 		commands.comment()
 	elseif action == "commit" then

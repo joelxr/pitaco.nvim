@@ -20,6 +20,7 @@ require('lazy').setup({
     dependencies = {
         'nvim-lua/plenary.nvim',
         'j-hui/fidget.nvim',
+        -- optional: improved commit UI
         'MunifTanjim/nui.nvim',
     },
     config = function()
@@ -36,8 +37,10 @@ Then, restart Neovim and run `:Lazy install`.
 
 Pitaco has the following dependencies:
 - `nvim-lua/plenary.nvim`
-- `MunifTanjim/nui.nvim`
 - `curl`
+
+Optional dependency:
+- `MunifTanjim/nui.nvim` (used for an enhanced `:Pitaco commit` UI, with fallback if missing)
 
 ## Usage 🛠️
 
@@ -49,7 +52,7 @@ Once installed, you can use the following commands to interact with Pitaco:
 - `:Pitaco clearLine` - Clear the current review for the current line.
 - `:Pitaco comment` - Add a comment under the current line with the Pitaco diagnostics summary.
 - `:Pitaco commit` - Generate a commit message from git changes and confirm the commit.
-- `:Pitaco health` - Check if Pitaco is properly configured.
+- `:Pitaco health` - Run Pitaco checks with `:checkhealth pitaco`.
 
 ## Configuration ⚙️
 
@@ -71,14 +74,19 @@ export OPENROUTER_API_KEY="your-openrouter-api-key"
 
 > **Disclaimer**: Currently, Pitaco only supports those providers. However, support for additional models is planned in the roadmap.
 
+For `ollama`, no API key is required. You may set:
+- `ollama_model_id` (default: `llama3.1`)
+- `ollama_url` (default: `http://localhost:11434`)
+
 You can configure Pitaco by adding the following to your Neovim configuration file:
 
 ```lua
 require('pitaco').setup({
-    openai_model_id = "gpt-4.1-mini",
-    anthropic_model_id = "claude-3-5-haiku-latest",
+    openai_model_id = "gpt-5-mini",
+    anthropic_model_id = "claude-haiku-4-5",
     openrouter_model_id = "openrouter/deepseek/deepseek-chat-v3-0324:free",
     ollama_model_id = "llama3.1",
+    ollama_url = "http://localhost:11434",
     provider = "anthropic", -- "openai", "anthropic", "openrouter", "ollama"
     language = "english",
     additional_instruction = nil,
@@ -86,6 +94,21 @@ require('pitaco').setup({
     commit_keymap = "<leader>at", -- Optional mapping for :Pitaco commit
 })
 ```
+
+### Health checks
+
+`Pitaco health` / `checkhealth pitaco` verifies:
+- required tools/deps (`plenary.nvim`, `curl`)
+- optional commit UI dependency (`nui.nvim`)
+- selected provider validity (`openai`, `anthropic`, `openrouter`, `ollama`)
+- model setup for each provider (warns when relying on defaults)
+- API keys for cloud providers:
+  - `OPENAI_API_KEY`
+  - `ANTHROPIC_API_KEY`
+  - `OPENROUTER_API_KEY`
+- Ollama setup:
+  - URL format (`ollama_url`)
+  - endpoint reachability (`/api/tags`)
 
 ### Diagnostics UI
 
