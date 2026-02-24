@@ -47,6 +47,11 @@ local function sanitize_commit_message(text)
 	return first_line
 end
 
+local function build_commit_system_prompt()
+	local language = config.get_language()
+	return config.get_commit_system_prompt() .. "\n- Write the subject line in " .. language .. "."
+end
+
 local function set_preview_keymaps(buf, win)
 	vim.keymap.set("n", "q", function()
 		if vim.api.nvim_win_is_valid(win) then
@@ -272,7 +277,7 @@ function M.run()
 	local needs_stage = staged_diff == ""
 	local has_unstaged = unstaged_diff ~= ""
 
-	local system_prompt = config.get_commit_system_prompt()
+	local system_prompt = build_commit_system_prompt()
 	local messages = {
 		{
 			role = "user",

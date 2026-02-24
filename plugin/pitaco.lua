@@ -37,12 +37,14 @@ vim.api.nvim_create_user_command("Pitaco", function(opts)
 		commands.commit()
 	elseif action == "models" then
 		commands.models()
+	elseif action == "language" then
+		commands.language(opts.fargs[2])
 	else
 		vim.notify("Invalid Pitaco command: " .. action, vim.log.levels.ERROR)
 	end
 end, {
 	nargs = "*", -- Allows for subcommands
 	complete = function() -- Autocomplete suggestions
-		return { "review", "clear", "clearLine", "health", "comment", "commit", "models" }
+		return { "review", "clear", "clearLine", "health", "comment", "commit", "models", "language" }
 	end,
 })

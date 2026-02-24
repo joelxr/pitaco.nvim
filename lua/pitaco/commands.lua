@@ -76,4 +76,37 @@ function M.models()
 	model_picker.open()
 end
 
+function M.language(value)
+	if value == nil or value == "" then
+		local configured = config.get_configured_language()
+		local current = config.get_language()
+		if current == configured then
+			vim.notify("Pitaco language: " .. current .. " (from config)", vim.log.levels.INFO)
+		else
+			vim.notify(
+				"Pitaco language: " .. current .. " (session override, config: " .. configured .. ")",
+				vim.log.levels.INFO
+			)
+		end
+		return
+	end
+
+	local normalized = vim.trim(value)
+	local lower = string.lower(normalized)
+
+	if lower == "default" or lower == "reset" then
+		config.clear_session_language()
+		vim.notify("Pitaco language reset to config value: " .. config.get_configured_language(), vim.log.levels.INFO)
+		return
+	end
+
+	local ok = config.set_session_language(normalized)
+	if not ok then
+		vim.notify("Pitaco language: invalid value", vim.log.levels.ERROR)
+		return
+	end
+
+	vim.notify("Pitaco session language set to: " .. config.get_language(), vim.log.levels.INFO)
+end
+
 return M

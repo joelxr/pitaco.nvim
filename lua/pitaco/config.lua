@@ -46,7 +46,37 @@ Rules:
 end
 
 function M.get_language()
-	return vim.g.pitaco_language
+	local language = vim.g.pitaco_session_language or vim.g.pitaco_language
+	if language == nil or language == "" then
+		return "english"
+	end
+	return language
+end
+
+function M.get_configured_language()
+	local language = vim.g.pitaco_language
+	if language == nil or language == "" then
+		return "english"
+	end
+	return language
+end
+
+function M.set_session_language(language)
+	if type(language) ~= "string" then
+		return false
+	end
+
+	local trimmed = vim.trim(language)
+	if trimmed == "" then
+		return false
+	end
+
+	vim.g.pitaco_session_language = trimmed
+	return true
+end
+
+function M.clear_session_language()
+	vim.g.pitaco_session_language = nil
 end
 
 function M.get_additional_instruction()

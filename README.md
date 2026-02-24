@@ -54,6 +54,8 @@ Once installed, you can use the following commands to interact with Pitaco:
 - `:Pitaco commit` - Generate a commit message from git changes and confirm the commit.
 - `:Pitaco health` - Run Pitaco checks with `:checkhealth pitaco`.
 - `:Pitaco models` - Open a model picker and switch provider/model on the fly.
+- `:Pitaco language [value]` - Show current language, or override it for this Neovim session.
+  - Use `:Pitaco language default` (or `reset`) to clear session override and return to setup value.
 
 ## Configuration ⚙️
 
@@ -95,6 +97,13 @@ require('pitaco').setup({
     commit_keymap = "<leader>at", -- Optional mapping for :Pitaco commit
     persist_model_selection = true, -- Save :Pitaco models selection in state file
 })
+```
+
+`language` defaults to `english` and is used for both review responses and generated commit subjects.
+You can temporarily override it during the current Neovim session with:
+
+```vim
+:Pitaco language portuguese
 ```
 
 `persist_model_selection` stores selected provider/model in:
