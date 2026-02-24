@@ -1,4 +1,4 @@
-*pitaco.nvim.txt*         For NVIM v0.8.0        Last change: 2026 February 12
+*pitaco.nvim.txt*         For NVIM v0.8.0        Last change: 2026 February 24
 
 ==============================================================================
 Table of Contents                              *pitaco.nvim-table-of-contents*
@@ -77,6 +77,8 @@ Once installed, you can use the following commands to interact with Pitaco:
 - `:Pitaco commit` - Generate a commit message from git changes and confirm the commit.
 - `:Pitaco health` - Run Pitaco checks with `:checkhealth pitaco`.
 - `:Pitaco models` - Open a model picker and switch provider/model on the fly.
+- `:Pitaco language [value]` - Show current language, or override it for this Neovim session.
+    - Use `:Pitaco language default` (or `reset`) to clear session override and return to setup value.
 
 
 CONFIGURATION ⚙️*pitaco.nvim-pitaco-neovim-plugin-🚀-configuration-⚙️*
@@ -122,6 +124,14 @@ file:
         commit_keymap = "<leader>at", -- Optional mapping for :Pitaco commit
         persist_model_selection = true, -- Save :Pitaco models selection in state file
     })
+<
+
+`language` defaults to `english` and is used for both review responses and
+generated commit subjects. You can temporarily override it during the current
+Neovim session with:
+
+>vim
+    :Pitaco language portuguese
 <
 
 `persist_model_selection` stores selected provider/model in: -
