@@ -3,6 +3,7 @@ local M = {}
 local provider_factory = require("pitaco.providers.factory")
 local config = require("pitaco.config")
 local progress = require("pitaco.progress")
+local log = require("pitaco.log")
 
 local function trim_text(text)
 	if vim.trim ~= nil then
@@ -287,15 +288,19 @@ function M.run()
 
 	progress.update("Generating commit message", 1, 1)
 	local request_json = provider.build_chat_request(system_prompt, messages, 256)
+	log.debug(("Dispatching commit request via provider '%s'"):format(provider.name or "unknown"))
+	log.preview_json("commit request payload", request_json)
 	provider.request(request_json, function(response, error_message)
 		vim.schedule(function()
 			if error_message ~= nil then
+				log.preview_text("commit request error", error_message)
 				progress.stop()
 				vim.notify("Pitaco commit: " .. error_message, vim.log.levels.ERROR)
 				return
 			end
 
 			local message = sanitize_commit_message(provider.extract_text(response))
+			log.preview_text("commit response text", provider.extract_text(response))
 			if message == nil then
 				progress.stop()
 				vim.notify("Pitaco commit: failed to parse commit message", vim.log.levels.ERROR)

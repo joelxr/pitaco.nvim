@@ -13,6 +13,7 @@ local default_opts = {
 	commit_keymap = nil,
 	commit_system_prompt = nil,
 	persist_model_selection = true,
+	debug = false,
 }
 
 function M.setup(opts)
@@ -42,6 +43,7 @@ function M.setup(opts)
 	vim.g.pitaco_commit_keymap = opts.commit_keymap
 	vim.g.pitaco_commit_system_prompt = opts.commit_system_prompt
 	vim.g.pitaco_persist_model_selection = opts.persist_model_selection
+	vim.g.pitaco_debug = opts.debug
 end
 
 return M

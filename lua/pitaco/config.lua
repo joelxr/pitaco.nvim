@@ -91,6 +91,10 @@ function M.get_provider()
 	return vim.g.pitaco_provider
 end
 
+function M.is_debug_enabled()
+	return vim.g.pitaco_debug == true
+end
+
 function M.get_openai_model()
 	local model = vim.g.pitaco_openai_model_id
 

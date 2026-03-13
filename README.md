@@ -94,6 +94,7 @@ require('pitaco').setup({
     language = "english",
     additional_instruction = nil,
     split_threshold = 100,
+    debug = false, -- Enable request/response debug logs via vim.notify
     commit_keymap = "<leader>at", -- Optional mapping for :Pitaco commit
     persist_model_selection = true, -- Save :Pitaco models selection in state file
 })
@@ -108,6 +109,8 @@ You can temporarily override it during the current Neovim session with:
 
 `persist_model_selection` stores selected provider/model in:
 - `stdpath("state") .. "/pitaco-model-state.json"`
+
+When `debug = true`, Pitaco emits request lifecycle logs for provider calls, including payload previews, HTTP status, decode failures, and response previews.
 
 The model picker discovers models from provider APIs (with default fallback when needed), including:
 - provider readiness (key configured / ollama reachable)

@@ -1,4 +1,7 @@
 local M = {}
+local log = require("pitaco.log")
+
+M.name = "openai"
 
 function M.get_api_key()
 	local key = os.getenv("OPENAI_API_KEY")
@@ -111,13 +114,18 @@ end
 function M.request(json_data, callback)
 	local curl = require("plenary.curl")
 	local api_key = M.get_api_key()
+	local url = "https://api.openai.com/v1/chat/completions"
 
 	if api_key == nil then
+		log.debug("openai request aborted: missing API key")
 		callback(nil, "No API key")
 		return
 	end
 
-	curl.post("https://api.openai.com/v1/chat/completions", {
+	log.debug(("openai request -> %s"):format(url))
+	log.preview_json("openai request body", json_data)
+
+	curl.post(url, {
 		headers = {
 			["Content-Type"] = "application/json",
 			["Authorization"] = "Bearer " .. api_key,
@@ -125,7 +133,11 @@ function M.request(json_data, callback)
 		body = json_data,
 		timeout = 30000,
 		callback = function(response)
+			log.debug(("openai response status=%s"):format(tostring(response.status)))
+			log.preview_text("openai raw response body", response.body, 500)
+
 			if response.status >= 400 then
+				log.debug("openai request failed with HTTP error")
 				callback(nil, "HTTP error: " .. response.body)
 				return
 			end
@@ -133,8 +145,10 @@ function M.request(json_data, callback)
 			vim.schedule(function()
 				local ok, body = pcall(vim.fn.json_decode, response.body)
 				if not ok then
+					log.debug("openai response JSON decode failed")
 					callback(nil, "Failed to decode response: " .. tostring(body))
 				else
+					log.debug_table("openai decoded response", body, 500)
 					callback(body, nil)
 				end
 			end)
