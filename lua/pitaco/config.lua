@@ -83,6 +83,18 @@ function M.get_additional_instruction()
 	return vim.g.pitaco_additional_instruction or ""
 end
 
+function M.get_review_additional_instruction()
+	local instruction = vim.g.pitaco_review_additional_instruction
+	if instruction == nil or instruction == "" then
+		return M.get_additional_instruction()
+	end
+	return instruction
+end
+
+function M.get_commit_additional_instruction()
+	return vim.g.pitaco_commit_additional_instruction or ""
+end
+
 function M.get_split_threshold()
 	return vim.g.pitaco_split_threshold
 end

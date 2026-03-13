@@ -50,7 +50,12 @@ end
 
 local function build_commit_system_prompt()
 	local language = config.get_language()
-	return config.get_commit_system_prompt() .. "\n- Write the subject line in " .. language .. "."
+	local prompt = config.get_commit_system_prompt() .. "\n- Write the subject line in " .. language .. "."
+	local additional_instruction = config.get_commit_additional_instruction()
+	if additional_instruction ~= "" then
+		prompt = prompt .. "\n" .. additional_instruction
+	end
+	return prompt
 end
 
 local function set_preview_keymaps(buf, win)

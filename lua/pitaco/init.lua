@@ -9,6 +9,8 @@ local default_opts = {
 	provider = "anthropic",
 	language = "english",
 	additional_instruction = nil,
+	review_additional_instruction = nil,
+	commit_additional_instruction = nil,
 	split_threshold = 100,
 	commit_keymap = nil,
 	commit_system_prompt = nil,
@@ -39,6 +41,8 @@ function M.setup(opts)
 	vim.g.pitaco_openai_model_id = opts.openai_model_id
 	vim.g.pitaco_language = opts.language
 	vim.g.pitaco_additional_instruction = opts.additional_instruction
+	vim.g.pitaco_review_additional_instruction = opts.review_additional_instruction
+	vim.g.pitaco_commit_additional_instruction = opts.commit_additional_instruction
 	vim.g.pitaco_split_threshold = opts.split_threshold
 	vim.g.pitaco_commit_keymap = opts.commit_keymap
 	vim.g.pitaco_commit_system_prompt = opts.commit_system_prompt

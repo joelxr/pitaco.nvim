@@ -50,7 +50,7 @@ function M.prepare_requests(messages)
 	local buffer_number = utils.get_buffer_number()
 	local split_threshold = config.get_split_threshold()
 	local language = config.get_language()
-	local additional_instruction = config.get_additional_instruction()
+	local additional_instruction = config.get_review_additional_instruction()
 	local lines = vim.api.nvim_buf_get_lines(buffer_number, 0, -1, false)
 	local model = M.get_model()
 

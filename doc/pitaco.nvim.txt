@@ -119,7 +119,8 @@ file:
         ollama_url = "http://localhost:11434",
         provider = "anthropic", -- "openai", "anthropic", "openrouter", "ollama"
         language = "english",
-        additional_instruction = nil,
+        review_additional_instruction = nil,
+        commit_additional_instruction = nil,
         split_threshold = 100,
         commit_keymap = "<leader>at", -- Optional mapping for :Pitaco commit
         persist_model_selection = true, -- Save :Pitaco models selection in state file
@@ -133,6 +134,11 @@ Neovim session with:
 >vim
     :Pitaco language portuguese
 <
+
+`review_additional_instruction` is appended to review requests.
+`commit_additional_instruction` is appended to the commit-message prompt.
+`additional_instruction` is still accepted as a backward-compatible alias for
+`review_additional_instruction`.
 
 `persist_model_selection` stores selected provider/model in: -
 `stdpath("state") .. "/pitaco-model-state.json"`

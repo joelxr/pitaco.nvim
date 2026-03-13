@@ -92,7 +92,8 @@ require('pitaco').setup({
     ollama_url = "http://localhost:11434",
     provider = "anthropic", -- "openai", "anthropic", "openrouter", "ollama"
     language = "english",
-    additional_instruction = nil,
+    review_additional_instruction = nil,
+    commit_additional_instruction = nil,
     split_threshold = 100,
     debug = false, -- Enable request/response debug logs via vim.notify
     commit_keymap = "<leader>at", -- Optional mapping for :Pitaco commit
@@ -106,6 +107,10 @@ You can temporarily override it during the current Neovim session with:
 ```vim
 :Pitaco language portuguese
 ```
+
+`review_additional_instruction` is appended to review requests.
+`commit_additional_instruction` is appended to the commit-message prompt.
+`additional_instruction` is still accepted as a backward-compatible alias for `review_additional_instruction`.
 
 `persist_model_selection` stores selected provider/model in:
 - `stdpath("state") .. "/pitaco-model-state.json"`
