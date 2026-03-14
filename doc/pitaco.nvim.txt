@@ -69,8 +69,14 @@ USAGE 🛠️            *pitaco.nvim-pitaco-neovim-plugin-🚀-usage-🛠️*
 
 Once installed, you can use the following commands to interact with Pitaco:
 
-- `:Pitaco` - Ask Pitaco to review your code.
-    - You can also use `review` as a subcommand.
+- `:Pitaco` - Review the full branch diff against `main` or `master` and
+  publish findings via the Neovim diagnostics API.
+- `:Pitaco review [diff|file]` - Review the full branch diff against
+  `main`/`master`, or the entire current file. Defaults to `diff`.
+- `:Pitaco diff` / `:Pitaco file` - Shorthand aliases for
+  `:Pitaco review diff` and `:Pitaco review file`.
+- `:PitacoReview [diff|file]` - Alias for repository-aware review. Defaults to
+  `diff`.
 - `:Pitaco clear` - Clear the current review.
 - `:Pitaco clearLine` - Clear the current review for the current line.
 - `:Pitaco comment` - Add a comment under the current line with the Pitaco diagnostics summary.
@@ -79,6 +85,10 @@ Once installed, you can use the following commands to interact with Pitaco:
 - `:Pitaco models` - Open a model picker and switch provider/model on the fly.
 - `:Pitaco language [value]` - Show current language, or override it for this Neovim session.
     - Use `:Pitaco language default` (or `reset`) to clear session override and return to setup value.
+
+Both review modes publish findings through Neovim's diagnostics API. Diff mode
+compares the current branch state against the local `main` branch when
+available, otherwise `master`.
 
 
 CONFIGURATION ⚙️*pitaco.nvim-pitaco-neovim-plugin-🚀-configuration-⚙️*

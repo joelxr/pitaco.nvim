@@ -2,6 +2,7 @@ local M = {}
 local log = require("pitaco.log")
 local review = require("pitaco.review")
 local review_parser = require("pitaco.review_parser")
+local response_utils = require("pitaco.providers.response_utils")
 
 M.name = "ollama"
 
@@ -34,8 +35,8 @@ function M.build_chat_request(system_prompt, messages, max_tokens)
 	return vim.json.encode(request_table)
 end
 
-function M.prepare_requests(messages)
-	return review.build_requests(M, messages)
+function M.prepare_requests(messages, review_mode)
+	return review.build_requests(M, messages, review_mode)
 end
 
 function M.request(json_data, callback)
@@ -89,15 +90,11 @@ end
 
 function M.parse_response(response)
 	local current_file = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":p")
-	return review_parser.parse_text(response.message.content, current_file)
+	return review_parser.parse_text(M.extract_text(response), current_file)
 end
 
 function M.extract_text(response)
-	if response == nil or response.message == nil then
-		return ""
-	end
-
-	return response.message.content or ""
+	return response_utils.ollama_text(response)
 end
 
 return M

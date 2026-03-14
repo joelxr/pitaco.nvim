@@ -46,9 +46,10 @@ Optional dependency:
 
 Once installed, you can use the following commands to interact with Pitaco:
 
-- `:Pitaco` - Ask Pitaco to review your code.
-  - You can also use `review` as a subcommand.
-- `:PitacoReview` - Alias for repository-aware review.
+- `:Pitaco` - Review the full branch diff against `main` or `master` and publish findings via the Neovim diagnostics API.
+- `:Pitaco review [diff|file]` - Review the full branch diff against `main`/`master`, or the entire current file. Defaults to `diff`.
+- `:Pitaco diff` / `:Pitaco file` - Shorthand aliases for `:Pitaco review diff` and `:Pitaco review file`.
+- `:PitacoReview [diff|file]` - Alias for repository-aware review. Defaults to `diff`.
 - `:Pitaco index` / `:PitacoIndex` - Build or update the local repository index used for contextual review.
 - `:Pitaco clear` - Clear the current review.
 - `:Pitaco clearLine` - Clear the current review for the current line.
@@ -125,12 +126,14 @@ You can temporarily override it during the current Neovim session with:
 
 Pitaco can enrich review prompts with relevant repository context retrieved from a local index.
 Reviews are sent as a single repository-aware request, not split into smaller chunks.
+Both review modes publish findings through Neovim's diagnostics API.
+Diff mode compares the current branch state against the local `main` branch when available, otherwise `master`.
 
 Review flow:
 
 ```text
 repo -> pitaco-indexer index -> .repo-pitaco/index
-buffer review -> pitaco-indexer search <file> -> relevant chunks -> LLM review prompt
+buffer review (branch diff|file) -> pitaco-indexer search <file> -> relevant chunks -> LLM review prompt
 ```
 
 The indexer:

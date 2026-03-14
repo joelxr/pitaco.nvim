@@ -160,7 +160,61 @@ function M.find_repo_root(path)
 	return start_dir
 end
 
-function M.get_git_diff(root, relative_path)
+function M.find_base_branch(root)
+	if root == nil or root == "" then
+		return nil
+	end
+
+	for _, candidate in ipairs({ "main", "master" }) do
+		local _, local_error = run_job(
+			"git",
+			{ "-C", root, "show-ref", "--verify", "--quiet", "refs/heads/" .. candidate },
+			root,
+			config.get_context_timeout_ms()
+		)
+		if local_error == nil then
+			return candidate
+		end
+
+		local _, remote_error = run_job(
+			"git",
+			{ "-C", root, "show-ref", "--verify", "--quiet", "refs/remotes/origin/" .. candidate },
+			root,
+			config.get_context_timeout_ms()
+		)
+		if remote_error == nil then
+			return "origin/" .. candidate
+		end
+	end
+
+	return nil
+end
+
+local function resolve_merge_base(root, base_branch)
+	if root == nil or root == "" or base_branch == nil or base_branch == "" then
+		return nil
+	end
+
+	local merge_base, merge_base_error = run_job(
+		"git",
+		{ "-C", root, "merge-base", "HEAD", base_branch },
+		root,
+		config.get_context_timeout_ms()
+	)
+	if merge_base_error ~= nil then
+		log.debug("git merge-base failed: " .. merge_base_error)
+		return nil
+	end
+
+	local resolved = join_lines(merge_base)
+	if resolved == "" then
+		return nil
+	end
+
+	return resolved
+end
+
+function M.get_file_git_diff(root, relative_path)
 	if root == nil or root == "" or relative_path == nil or relative_path == "" then
 		return ""
 	end
@@ -199,6 +253,26 @@ function M.get_git_diff(root, relative_path)
 	return table.concat(sections, "\n\n")
 end
 
+function M.get_branch_git_diff(root, base_branch)
+	local merge_base = resolve_merge_base(root, base_branch)
+	if merge_base == nil then
+		return "", "Pitaco could not determine the merge base for diff review"
+	end
+
+	local branch_diff, branch_diff_error = run_job(
+		"git",
+		{ "-C", root, "diff", "--no-ext-diff", merge_base, "--" },
+		root,
+		config.get_context_timeout_ms()
+	)
+	if branch_diff_error ~= nil then
+		log.debug("git branch diff failed: " .. branch_diff_error)
+		return "", branch_diff_error
+	end
+
+	return join_lines(branch_diff), nil
+end
+
 function M.search(root, relative_path, limit)
 	local result, error_message = run_cli({
 		"search",
@@ -227,7 +301,7 @@ function M.search(root, relative_path, limit)
 	return decoded, nil
 end
 
-function M.collect_review_context(bufnr)
+function M.collect_review_context(bufnr, review_mode)
 	if not config.is_context_enabled() then
 		return {
 			enabled = false,
@@ -260,8 +334,16 @@ function M.collect_review_context(bufnr)
 	end
 
 	local git_diff = ""
-	if config.should_include_git_diff() then
-		git_diff = M.get_git_diff(root, relative_path)
+	local base_branch = M.find_base_branch(root)
+	local diff_error = nil
+	if review_mode == "diff" then
+		git_diff, diff_error = M.get_branch_git_diff(root, base_branch)
+	elseif config.should_include_git_diff() then
+		git_diff = M.get_file_git_diff(root, relative_path)
+	end
+
+	if diff_error ~= nil then
+		log.debug("context diff failed: " .. diff_error)
 	end
 
 	return {
@@ -271,7 +353,9 @@ function M.collect_review_context(bufnr)
 		project_summary = search_result and search_result.summary or nil,
 		relevant_chunks = search_result and search_result.results or {},
 		search_engine = search_result and search_result.engine or nil,
+		base_branch = base_branch,
 		git_diff = git_diff,
+		diff_error = diff_error,
 		search_error = search_error,
 	}
 end

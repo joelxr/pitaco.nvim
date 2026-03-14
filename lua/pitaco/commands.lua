@@ -10,9 +10,27 @@ local model_picker = require("pitaco.model_picker")
 local context_engine = require("pitaco.context_engine")
 local namespace = vim.api.nvim_create_namespace("pitaco")
 
-function M.review()
+local function normalize_review_mode(mode)
+	if mode == nil or mode == "" then
+		return "diff"
+	end
+
+	if mode == "diff" or mode == "file" then
+		return mode
+	end
+
+	vim.notify("Invalid Pitaco review mode: " .. tostring(mode), vim.log.levels.ERROR)
+	return nil
+end
+
+function M.review(mode)
+	local review_mode = normalize_review_mode(mode)
+	if review_mode == nil then
+		return
+	end
+
 	local provider = provider_factory.create_provider(config.get_provider())
-	local all_requests, num_requests, line_count = provider.prepare_requests(fewshot.messages)
+	local all_requests, num_requests, line_count = provider.prepare_requests(fewshot.messages, review_mode)
 	requests.make_requests(namespace, provider, all_requests, num_requests, 0, line_count)
 end
 
