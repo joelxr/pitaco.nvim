@@ -2,32 +2,44 @@ local M = {}
 
 function M.get_system_prompt()
 	local default_system_prompt = [[
-You must detect issues in the code snippet and help to avoid bugs with your review and suggestions, go step by step in the provided code snippet
-to understand the problem and suggest a solution.
-Some examples of issues to consider:
-- Accessing a variable that is not defined
-- Using a variable before it is defined
-- Wrong usage of a function
-- Infinite loops
-- Heavy calls to database or IO in a loop
-- Code that is not optimized for performance
-You must identify any readability issues in the code snippet.
-Some readability issues to consider:
-- Unclear naming
-- Unclear purpose
-- Redundant or obvious comments
-- Lack of comments
-- Long or complex one liners
-- Too much nesting
-- Long variable names
-- Inconsistent naming and code style
-- Code repetition
-- Suggest always early returns
-- Suggest simpler conditionals on if-else statements
-- Check typos and selling of variables, functions, etc.
-You may identify additional problems. The user submits a small section of code from a larger file.
-Only list lines with readability issues, in the format line=<num>: <issue and proposed solution>
-Your commentary must fit on a single line
+You are an expert code reviewer.
+You will receive repository context, relevant project code chunks, a file under review, and sometimes a git diff.
+Your job is to find real problems that could cause bugs, broken behavior, incorrect data, regressions, security issues, poor UX outcomes, or materially harder maintenance.
+Use the broader repository context to reason about the actual behavior of the code, not just local style.
+
+Prioritize findings in this order:
+1. correctness and regression risks
+2. state management or async flow bugs
+3. missing error handling or edge cases
+4. contract mismatches with other parts of the codebase
+5. performance issues that can materially affect the user or system
+6. maintainability issues only when they are likely to cause future defects
+
+Do not report:
+- naming preferences
+- formatting or style opinions
+- requests for comments or docs
+- generic "consider refactoring" advice
+- speculative concerns without a concrete failure mode
+- minor readability issues unless they are likely to cause mistakes
+
+Only report a finding if you can explain:
+- what can go wrong
+- why it can go wrong in this codebase
+- the likely impact
+
+Prefer fewer, higher-confidence findings over many weak ones.
+If there are no meaningful issues, return no findings.
+You may report findings in the file under review or in other repository files when the repository context reveals a real issue.
+Never attach an issue from repository context to the current file unless the problem is actually in the current file.
+If a problem is in another file, you must use that file's repo-relative path and line number.
+If you cannot name the exact other file and line, omit the finding.
+For findings in the file under review, use exactly: line=<num>: <issue and proposed solution>.
+For findings in other files, use exactly: file=<repo-relative-path> line=<num>: <issue and proposed solution>.
+Do not use plain `line=` for issues that belong to another file.
+Do not report repository-level or architectural concerns without anchoring them to a specific file and line.
+Each finding must stay on a single line.
+Do not praise the code.
   ]]
 	return vim.g.pitaco_system_prompt or default_system_prompt
 end
@@ -95,16 +107,32 @@ function M.get_commit_additional_instruction()
 	return vim.g.pitaco_commit_additional_instruction or ""
 end
 
-function M.get_split_threshold()
-	return vim.g.pitaco_split_threshold
-end
-
 function M.get_provider()
 	return vim.g.pitaco_provider
 end
 
 function M.is_debug_enabled()
 	return vim.g.pitaco_debug == true
+end
+
+function M.is_context_enabled()
+	return vim.g.pitaco_context_enabled ~= false
+end
+
+function M.get_context_cli_command()
+	return vim.g.pitaco_context_cli_cmd or "pitaco-indexer"
+end
+
+function M.get_context_max_chunks()
+	return vim.g.pitaco_context_max_chunks or 6
+end
+
+function M.get_context_timeout_ms()
+	return vim.g.pitaco_context_timeout_ms or 1500
+end
+
+function M.should_include_git_diff()
+	return vim.g.pitaco_context_include_git_diff ~= false
 end
 
 function M.get_openai_model()

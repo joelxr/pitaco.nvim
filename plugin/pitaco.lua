@@ -19,6 +19,14 @@ if vim.g.pitaco_commit_keymap ~= nil and vim.g.pitaco_commit_keymap ~= "" then
 	vim.keymap.set("n", vim.g.pitaco_commit_keymap, "<cmd>Pitaco commit<CR>", { desc = "Pitaco commit" })
 end
 
+vim.api.nvim_create_user_command("PitacoReview", function()
+	commands.review()
+end, {})
+
+vim.api.nvim_create_user_command("PitacoIndex", function()
+	commands.index()
+end, {})
+
 -- Main Pitaco command with subcommands
 vim.api.nvim_create_user_command("Pitaco", function(opts)
 	local action = opts.fargs[1] or "review" -- Default to 'review' if no subcommand is given
@@ -31,6 +39,8 @@ vim.api.nvim_create_user_command("Pitaco", function(opts)
 		commands.clear_line()
 	elseif action == "health" then
 		vim.cmd("checkhealth pitaco")
+	elseif action == "index" then
+		commands.index()
 	elseif action == "comment" then
 		commands.comment()
 	elseif action == "commit" then
@@ -45,6 +55,6 @@ vim.api.nvim_create_user_command("Pitaco", function(opts)
 end, {
 	nargs = "*", -- Allows for subcommands
 	complete = function() -- Autocomplete suggestions
-		return { "review", "clear", "clearLine", "health", "comment", "commit", "models", "language" }
+		return { "review", "index", "clear", "clearLine", "health", "comment", "commit", "models", "language" }
 	end,
 })

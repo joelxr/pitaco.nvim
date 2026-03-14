@@ -2,6 +2,9 @@ local M = {}
 
 function M.prepare_code_snippet(buf_nr, starting_line_number, ending_line_number)
 	local lines = vim.api.nvim_buf_get_lines(buf_nr, starting_line_number - 1, ending_line_number, false)
+	if vim.tbl_isempty(lines) then
+		return string.format("%02d ", starting_line_number)
+	end
 	local max_digits = string.len(tostring(#lines + starting_line_number))
 
 	for i, line in ipairs(lines) do

@@ -11,10 +11,14 @@ local default_opts = {
 	additional_instruction = nil,
 	review_additional_instruction = nil,
 	commit_additional_instruction = nil,
-	split_threshold = 100,
 	commit_keymap = nil,
 	commit_system_prompt = nil,
 	persist_model_selection = true,
+	context_enabled = true,
+	context_cli_cmd = "pitaco-indexer",
+	context_max_chunks = 6,
+	context_timeout_ms = 1500,
+	context_include_git_diff = true,
 	debug = false,
 }
 
@@ -43,10 +47,14 @@ function M.setup(opts)
 	vim.g.pitaco_additional_instruction = opts.additional_instruction
 	vim.g.pitaco_review_additional_instruction = opts.review_additional_instruction
 	vim.g.pitaco_commit_additional_instruction = opts.commit_additional_instruction
-	vim.g.pitaco_split_threshold = opts.split_threshold
 	vim.g.pitaco_commit_keymap = opts.commit_keymap
 	vim.g.pitaco_commit_system_prompt = opts.commit_system_prompt
 	vim.g.pitaco_persist_model_selection = opts.persist_model_selection
+	vim.g.pitaco_context_enabled = opts.context_enabled
+	vim.g.pitaco_context_cli_cmd = opts.context_cli_cmd
+	vim.g.pitaco_context_max_chunks = opts.context_max_chunks
+	vim.g.pitaco_context_timeout_ms = opts.context_timeout_ms
+	vim.g.pitaco_context_include_git_diff = opts.context_include_git_diff
 	vim.g.pitaco_debug = opts.debug
 end
 

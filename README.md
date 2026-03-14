@@ -48,6 +48,8 @@ Once installed, you can use the following commands to interact with Pitaco:
 
 - `:Pitaco` - Ask Pitaco to review your code.
   - You can also use `review` as a subcommand.
+- `:PitacoReview` - Alias for repository-aware review.
+- `:Pitaco index` / `:PitacoIndex` - Build or update the local repository index used for contextual review.
 - `:Pitaco clear` - Clear the current review.
 - `:Pitaco clearLine` - Clear the current review for the current line.
 - `:Pitaco comment` - Add a comment under the current line with the Pitaco diagnostics summary.
@@ -94,10 +96,14 @@ require('pitaco').setup({
     language = "english",
     review_additional_instruction = nil,
     commit_additional_instruction = nil,
-    split_threshold = 100,
     debug = false, -- Enable request/response debug logs via vim.notify
     commit_keymap = "<leader>at", -- Optional mapping for :Pitaco commit
     persist_model_selection = true, -- Save :Pitaco models selection in state file
+    context_enabled = true,
+    context_cli_cmd = "pitaco-indexer", -- Or { "node", "/absolute/path/to/indexer/src/cli.js" }
+    context_max_chunks = 6,
+    context_timeout_ms = 1500,
+    context_include_git_diff = true,
 })
 ```
 
@@ -114,6 +120,101 @@ You can temporarily override it during the current Neovim session with:
 
 `persist_model_selection` stores selected provider/model in:
 - `stdpath("state") .. "/pitaco-model-state.json"`
+
+### Repository-aware review
+
+Pitaco can enrich review prompts with relevant repository context retrieved from a local index.
+Reviews are sent as a single repository-aware request, not split into smaller chunks.
+
+Review flow:
+
+```text
+repo -> pitaco-indexer index -> .repo-pitaco/index
+buffer review -> pitaco-indexer search <file> -> relevant chunks -> LLM review prompt
+```
+
+The indexer:
+- scans repository files while ignoring `.git`, `.repo-pitaco`, `node_modules`, `dist`, `build`, `target`, and `vendor`
+- parses supported files with tree-sitter
+- extracts semantic chunks for functions, classes, methods, and file-level fallbacks
+- stores embeddings and metadata under `.repo-pitaco/index`
+- reindexes only files whose hash or modification time changed
+
+Supported languages:
+- TypeScript / TSX
+- JavaScript / JSX
+- Lua
+- Go
+- Python
+
+Install the local CLI from this repository:
+
+```bash
+cd indexer
+npm install
+npm link
+```
+
+The `indexer/` workspace includes an `.npmrc` with `legacy-peer-deps=true` because the published tree-sitter grammar packages currently declare conflicting optional peer ranges for `tree-sitter`.
+
+If you use `lazy.nvim` or LazyVim, you can install the indexer dependencies as part of the plugin spec and point Pitaco at the local script instead of using `npm link`:
+
+```lua
+{
+    "joelxr/pitaco.nvim",
+    dependencies = {
+        "nvim-lua/plenary.nvim",
+    },
+    build = function(plugin)
+        vim.fn.system({
+            vim.fn.exepath("npm"),
+            "install",
+            "--prefix",
+            plugin.dir .. "/indexer",
+        })
+    end,
+    config = function(plugin)
+        require("pitaco").setup({
+            context_cli_cmd = {
+                vim.fn.exepath("node"),
+                plugin.dir .. "/indexer/src/cli.js",
+            },
+        })
+    end,
+}
+```
+
+After changing the plugin spec, run `:Lazy sync` or `:Lazy build pitaco.nvim` so the `indexer/` dependencies are installed.
+
+If you do not want to link it globally, point Pitaco directly at the local script:
+
+```lua
+require("pitaco").setup({
+    context_cli_cmd = { vim.fn.exepath("node"), "/absolute/path/to/pitaco.nvim/indexer/src/cli.js" },
+})
+```
+
+Optional indexer configuration lives at `.repo-pitaco/config.json`:
+
+```json
+{
+  "embedding": {
+    "provider": "ollama",
+    "model": "nomic-embed-text",
+    "baseUrl": "http://localhost:11434"
+  },
+  "search": {
+    "limit": 6
+  }
+}
+```
+
+Recommended embedding providers:
+- `ollama` with `nomic-embed-text`
+- `openai` with `text-embedding-3-small`
+- `openrouter` with `text-embedding-3-small`
+
+When no remote embedding provider is configured, the indexer falls back to a local hashed embedding so the workflow still works offline.
 
 When `debug = true`, Pitaco emits request lifecycle logs for provider calls, including payload previews, HTTP status, decode failures, and response previews.
 

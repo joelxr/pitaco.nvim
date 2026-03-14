@@ -1,6 +1,7 @@
 local progress = require("pitaco.progress")
 local utils = require("pitaco.utils")
 local log = require("pitaco.log")
+local context_engine = require("pitaco.context_engine")
 
 local M = {}
 
@@ -53,14 +54,48 @@ function M.make_requests(namespace, provider, requests, starting_request_count, 
 			end
 
 			log.debug(("Parsed %d diagnostics from provider response"):format(#diagnostics))
+			log.debug_table("parsed diagnostics", diagnostics)
 
 			vim.schedule(function()
-				local buf = utils.get_buffer_number()
-				local existing = vim.diagnostic.get(buf, {namespace = namespace}) or {}
+				local current_path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(utils.get_buffer_number()), ":p")
+				local current_root = context_engine.find_repo_root(current_path)
+				local current_count = 0
+				local other_count = 0
+
 				for _, diag in ipairs(diagnostics) do
-					table.insert(existing, diag)
+					local target = diag.file or current_path
+					local path = target
+
+					if type(target) == "string" and target ~= "" and not target:find("^/") then
+						local base_root = current_root or vim.fn.getcwd()
+						path = base_root .. "/" .. target
+					end
+
+					local buf = vim.fn.bufadd(path)
+					vim.fn.bufload(buf)
+					local existing = vim.diagnostic.get(buf, { namespace = namespace }) or {}
+					local stored = vim.deepcopy(diag)
+					stored.file = nil
+					table.insert(existing, stored)
+					vim.diagnostic.set(namespace, buf, existing)
+
+					if vim.fn.fnamemodify(path, ":p") == current_path then
+						current_count = current_count + 1
+					else
+						other_count = other_count + 1
+					end
 				end
-				vim.diagnostic.set(namespace, buf, existing)
+
+				if #diagnostics > 0 then
+					local parts = {}
+					if current_count > 0 then
+						table.insert(parts, ("%d in current file"):format(current_count))
+					end
+					if other_count > 0 then
+						table.insert(parts, ("%d in other files"):format(other_count))
+					end
+					vim.notify("Pitaco diagnostics: " .. table.concat(parts, ", "), vim.log.levels.INFO)
+				end
 			end)
 		end
 

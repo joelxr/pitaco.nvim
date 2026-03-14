@@ -44,6 +44,26 @@ local function check_curl()
   return false
 end
 
+local function check_context_engine()
+  local command = require("pitaco.config").get_context_cli_command()
+  if type(command) == "table" then
+    command = command[1]
+  end
+
+  if not is_non_empty_string(command) then
+    vim.health.warn("Pitaco context engine CLI command is not configured")
+    return false
+  end
+
+  if vim.fn.executable(command) == 1 then
+    vim.health.ok(("Context engine CLI found: %s"):format(command))
+    return true
+  end
+
+  vim.health.warn(("Context engine CLI not found in PATH: %s"):format(command))
+  return false
+end
+
 local function check_nui()
   local has_layout, _ = pcall(require, "nui.layout")
   local has_popup, _ = pcall(require, "nui.popup")
@@ -166,6 +186,7 @@ function M.check()
   check_plenary()
   check_nui()
   check_curl()
+  check_context_engine()
   local _, provider = check_provider_config()
   check_all_provider_setups(provider)
 end
