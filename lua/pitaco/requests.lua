@@ -24,7 +24,7 @@ function M.make_requests(namespace, provider, requests, starting_request_count, 
 	log.preview_json("analysis request payload", request_json)
 
 	progress.update(
-		"Processing request " .. request_index .. " of " .. starting_request_count,
+		"Processing review",
 		request_index,
 		starting_request_count
 	)
