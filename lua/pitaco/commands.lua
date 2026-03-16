@@ -10,6 +10,28 @@ local model_picker = require("pitaco.model_picker")
 local context_engine = require("pitaco.context_engine")
 local namespace = vim.api.nvim_create_namespace("pitaco")
 
+local function normalize_scope(scope)
+	if type(scope) ~= "string" then
+		return nil
+	end
+
+	local trimmed = vim.trim(scope)
+	if trimmed == "" then
+		return nil
+	end
+
+	local lowered = trimmed:lower()
+	if lowered == "default" or lowered == "base" or lowered == "global" then
+		return nil
+	end
+
+	return trimmed
+end
+
+local function scope_label(scope)
+	return normalize_scope(scope) or "default"
+end
+
 local function normalize_review_mode(mode)
 	if mode == nil or mode == "" then
 		return "diff"
@@ -98,6 +120,75 @@ end
 
 function M.models(scope)
 	model_picker.open(scope)
+end
+
+function M.summary()
+	local lines = {
+		"Pitaco summary",
+		("debug: %s"):format(config.is_debug_enabled() and "enabled" or "disabled"),
+		("language: %s"):format(config.get_language()),
+	}
+
+	local function append_scope(scope)
+		local normalized_scope = normalize_scope(scope)
+		local provider = config.get_provider(normalized_scope)
+		local model_id = provider and config.get_model(provider, normalized_scope) or nil
+		local overrides = config.get_feature_overrides(normalized_scope)
+		local note = "active selection"
+
+		if normalized_scope ~= nil then
+			if type(overrides) ~= "table" then
+				note = "inherits default"
+			elseif type(overrides.provider) == "string" and overrides.provider ~= "" then
+				if type(overrides.model_id) == "string" and overrides.model_id ~= "" then
+					note = "scoped override"
+				else
+					note = "provider override with default model fallback"
+				end
+			elseif type(overrides.model_id) == "string" and overrides.model_id ~= "" then
+				note = "scoped model override"
+			end
+		end
+
+		table.insert(
+			lines,
+			("%s: %s / %s (%s)"):format(scope_label(normalized_scope), provider or "unknown", model_id or "unknown", note)
+		)
+	end
+
+	append_scope(nil)
+	for _, scope in ipairs(config.list_feature_scopes()) do
+		append_scope(scope)
+	end
+
+	vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO, { title = "pitaco" })
+end
+
+function M.debug(value)
+	if value == nil or value == "" then
+		vim.notify(
+			("Pitaco debug: %s"):format(config.is_debug_enabled() and "enabled" or "disabled"),
+			vim.log.levels.INFO
+		)
+		return
+	end
+
+	local normalized = vim.trim(value):lower()
+	if normalized == "on" or normalized == "enable" or normalized == "enabled" or normalized == "true" or normalized == "1" then
+		vim.g.pitaco_debug = true
+	elseif normalized == "off" or normalized == "disable" or normalized == "disabled" or normalized == "false" or normalized == "0" then
+		vim.g.pitaco_debug = false
+	elseif normalized == "toggle" then
+		vim.g.pitaco_debug = not config.is_debug_enabled()
+	else
+		vim.notify("Pitaco debug: expected on, off, or toggle", vim.log.levels.ERROR)
+		return
+	end
+
+	vim.notify(
+		("Pitaco debug %s"):format(config.is_debug_enabled() and "enabled" or "disabled"),
+		vim.log.levels.INFO
+	)
 end
 
 function M.language(value)

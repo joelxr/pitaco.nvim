@@ -61,6 +61,8 @@ Once installed, you can use the following commands to interact with Pitaco:
 - `:Pitaco commit` - Generate a commit message from git changes and confirm the commit.
 - `:Pitaco health` - Run Pitaco checks with `:checkhealth pitaco`.
 - `:Pitaco models [default|scope]` - Open a model picker for the base config or a feature scope such as `review` or `commit`.
+- `:Pitaco summary` - Show the resolved runtime Pitaco summary, including active provider/model selections per scope.
+- `:Pitaco debug [on|off|toggle]` - Show or change the plugin debug mode for the current Neovim session.
 - `:Pitaco language [value]` - Show current language, or override it for this Neovim session.
   - Use `:Pitaco language default` (or `reset`) to clear session override and return to setup value.
 
@@ -163,6 +165,8 @@ Flat aliases such as `review_provider`, `review_model_id`, `commit_provider`, an
 
 `:Pitaco models` changes the base/default provider and model.
 `:Pitaco models commit` or `:Pitaco models review` changes that feature's scoped provider/model override and shows the current selection in the picker header.
+`:Pitaco summary` reports the resolved runtime provider/model for the default scope and every configured feature scope, so inherited and fallback models are visible.
+`:Pitaco debug on`, `:Pitaco debug off`, and `:Pitaco debug toggle` change the live debug flag without re-running `setup()`.
 
 ### Repository-aware review
 

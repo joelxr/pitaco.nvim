@@ -57,6 +57,10 @@ vim.api.nvim_create_user_command("Pitaco", function(opts)
 		commands.commit()
 	elseif action == "models" then
 		commands.models(opts.fargs[2])
+	elseif action == "summary" then
+		commands.summary()
+	elseif action == "debug" then
+		commands.debug(opts.fargs[2])
 	elseif action == "language" then
 		commands.language(opts.fargs[2])
 	else
@@ -76,6 +80,8 @@ end, {
 			"comment",
 			"commit",
 			"models",
+			"summary",
+			"debug",
 			"language",
 		}
 
@@ -86,6 +92,10 @@ end, {
 				table.insert(scopes, scope)
 			end
 			return scopes
+		end
+
+		if line:match("^%s*Pitaco%s+debug%s+") then
+			return { "on", "off", "toggle" }
 		end
 
 		return items
