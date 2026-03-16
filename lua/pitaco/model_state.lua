@@ -42,22 +42,6 @@ local function write_json_file(path, payload)
 	return true
 end
 
-local function model_var_name(provider)
-	if provider == "openai" then
-		return "pitaco_openai_model_id"
-	end
-	if provider == "anthropic" then
-		return "pitaco_anthropic_model_id"
-	end
-	if provider == "openrouter" then
-		return "pitaco_openrouter_model_id"
-	end
-	if provider == "ollama" then
-		return "pitaco_ollama_model_id"
-	end
-	return nil
-end
-
 function M.load()
 	return read_json_file(state_file_path())
 end
@@ -75,13 +59,8 @@ function M.apply(selection)
 		vim.g.pitaco_provider = selection.provider
 	end
 
-	if type(selection.models) == "table" then
-		for provider, model in pairs(selection.models) do
-			local var_name = model_var_name(provider)
-			if var_name ~= nil and type(model) == "string" and model ~= "" then
-				vim.g[var_name] = model
-			end
-		end
+	if type(selection.model_id) == "string" and selection.model_id ~= "" then
+		vim.g.pitaco_model_id = selection.model_id
 	end
 
 	return true
@@ -89,9 +68,22 @@ end
 
 function M.persist_selection(provider, model_id)
 	local state = M.load()
-	state.models = state.models or {}
 	state.provider = provider
-	state.models[provider] = model_id
+	state.model_id = model_id
+	state.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+	return M.save(state)
+end
+
+function M.persist_feature_selection(scope, provider, model_id)
+	if type(scope) ~= "string" or scope == "" then
+		return false, "invalid scope"
+	end
+
+	local state = M.load()
+	state.features = state.features or {}
+	state.features[scope] = state.features[scope] or {}
+	state.features[scope].provider = provider
+	state.features[scope].model_id = model_id
 	state.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
 	return M.save(state)
 end

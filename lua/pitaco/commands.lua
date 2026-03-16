@@ -96,8 +96,8 @@ function M.commit()
 	commit.run()
 end
 
-function M.models()
-	model_picker.open()
+function M.models(scope)
+	model_picker.open(scope)
 end
 
 function M.language(value)

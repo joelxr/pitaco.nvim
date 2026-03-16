@@ -168,6 +168,7 @@ local function check_scope_resolution(scope)
 end
 
 local function check_all_provider_setups(selected_provider)
+  local config = require("pitaco.config")
   vim.health.start("Provider setup")
 
   local ready = {
@@ -177,19 +178,16 @@ local function check_all_provider_setups(selected_provider)
     ollama = true,
   }
 
-  ready.openai = check_model("openai", vim.g.pitaco_openai_model_id)
-  ready.openai = check_api_key("openai", "OPENAI_API_KEY") and ready.openai
+  ready.openai = check_api_key("openai", "OPENAI_API_KEY")
 
-  ready.anthropic = check_model("anthropic", vim.g.pitaco_anthropic_model_id)
-  ready.anthropic = check_api_key("anthropic", "ANTHROPIC_API_KEY") and ready.anthropic
+  ready.anthropic = check_api_key("anthropic", "ANTHROPIC_API_KEY")
 
-  ready.openrouter = check_model("openrouter", vim.g.pitaco_openrouter_model_id)
-  ready.openrouter = check_api_key("openrouter", "OPENROUTER_API_KEY") and ready.openrouter
+  ready.openrouter = check_api_key("openrouter", "OPENROUTER_API_KEY")
 
-  ready.ollama = check_model("ollama", vim.g.pitaco_ollama_model_id)
-  ready.ollama = check_ollama_url() and ready.ollama
+  ready.ollama = check_ollama_url()
 
   if selected_provider ~= nil and VALID_PROVIDERS[selected_provider] then
+    check_model(selected_provider, config.get_model(selected_provider))
     if ready[selected_provider] then
       vim.health.ok(("Selected provider '%s' looks ready"):format(selected_provider))
     else

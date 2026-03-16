@@ -1,10 +1,14 @@
 local M = {}
 
+local DEFAULT_MODELS = {
+	openai = "gpt-5-mini",
+	anthropic = "claude-haiku-4-5",
+	openrouter = "openrouter/deepseek/deepseek-chat-v3-0324:free",
+	ollama = "llama3.1",
+}
+
 local default_opts = {
-	anthropic_model_id = "claude-haiku-4-5",
-	openai_model_id = "gpt-5-mini",
-	openrouter_model_id = "openrouter/deepseek/deepseek-chat-v3-0324:free",
-	ollama_model_id = "llama3.1",
+	model_id = nil,
 	ollama_url = "http://localhost:11434",
 	provider = "anthropic",
 	language = "english",
@@ -23,6 +27,26 @@ local default_opts = {
 	features = {},
 }
 
+local function merge_persisted_feature_overrides(features, persisted)
+	if type(persisted) ~= "table" then
+		return features
+	end
+
+	for scope, overrides in pairs(persisted) do
+		if type(scope) == "string" and scope ~= "" and type(overrides) == "table" then
+			features[scope] = features[scope] or {}
+			if type(overrides.provider) == "string" and overrides.provider ~= "" then
+				features[scope].provider = overrides.provider
+			end
+			if type(overrides.model_id) == "string" and overrides.model_id ~= "" then
+				features[scope].model_id = overrides.model_id
+			end
+		end
+	end
+
+	return features
+end
+
 local function extract_feature_overrides(opts)
 	local features = vim.deepcopy(opts.features or {})
 
@@ -37,36 +61,12 @@ local function extract_feature_overrides(opts)
 	if opts.review_model_id ~= nil then
 		ensure_scope("review").model_id = opts.review_model_id
 	end
-	if opts.review_openai_model_id ~= nil then
-		ensure_scope("review").openai_model_id = opts.review_openai_model_id
-	end
-	if opts.review_anthropic_model_id ~= nil then
-		ensure_scope("review").anthropic_model_id = opts.review_anthropic_model_id
-	end
-	if opts.review_openrouter_model_id ~= nil then
-		ensure_scope("review").openrouter_model_id = opts.review_openrouter_model_id
-	end
-	if opts.review_ollama_model_id ~= nil then
-		ensure_scope("review").ollama_model_id = opts.review_ollama_model_id
-	end
 
 	if opts.commit_provider ~= nil then
 		ensure_scope("commit").provider = opts.commit_provider
 	end
 	if opts.commit_model_id ~= nil then
 		ensure_scope("commit").model_id = opts.commit_model_id
-	end
-	if opts.commit_openai_model_id ~= nil then
-		ensure_scope("commit").openai_model_id = opts.commit_openai_model_id
-	end
-	if opts.commit_anthropic_model_id ~= nil then
-		ensure_scope("commit").anthropic_model_id = opts.commit_anthropic_model_id
-	end
-	if opts.commit_openrouter_model_id ~= nil then
-		ensure_scope("commit").openrouter_model_id = opts.commit_openrouter_model_id
-	end
-	if opts.commit_ollama_model_id ~= nil then
-		ensure_scope("commit").ollama_model_id = opts.commit_ollama_model_id
 	end
 
 	return features
@@ -80,20 +80,19 @@ function M.setup(opts)
 		if type(state.provider) == "string" and state.provider ~= "" then
 			opts.provider = state.provider
 		end
-		if type(state.models) == "table" then
-			opts.openai_model_id = state.models.openai or opts.openai_model_id
-			opts.anthropic_model_id = state.models.anthropic or opts.anthropic_model_id
-			opts.openrouter_model_id = state.models.openrouter or opts.openrouter_model_id
-			opts.ollama_model_id = state.models.ollama or opts.ollama_model_id
+		if type(state.model_id) == "string" and state.model_id ~= "" then
+			opts.model_id = state.model_id
 		end
+		feature_overrides = merge_persisted_feature_overrides(feature_overrides, state.features)
+	end
+
+	if opts.model_id == nil or opts.model_id == "" then
+		opts.model_id = DEFAULT_MODELS[opts.provider]
 	end
 
 	vim.g.pitaco_provider = opts.provider
-	vim.g.pitaco_anthropic_model_id = opts.anthropic_model_id
-	vim.g.pitaco_openrouter_model_id = opts.openrouter_model_id
-	vim.g.pitaco_ollama_model_id = opts.ollama_model_id
+	vim.g.pitaco_model_id = opts.model_id
 	vim.g.pitaco_ollama_url = opts.ollama_url
-	vim.g.pitaco_openai_model_id = opts.openai_model_id
 	vim.g.pitaco_language = opts.language
 	vim.g.pitaco_additional_instruction = opts.additional_instruction
 	vim.g.pitaco_review_additional_instruction = opts.review_additional_instruction

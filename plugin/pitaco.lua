@@ -10,6 +10,7 @@ end
 vim.g.loaded_pitaco = true
 
 local pitaco = require("pitaco")
+local config = require("pitaco.config")
 
 pitaco.setup()
 
@@ -55,7 +56,7 @@ vim.api.nvim_create_user_command("Pitaco", function(opts)
 	elseif action == "commit" then
 		commands.commit()
 	elseif action == "models" then
-		commands.models()
+		commands.models(opts.fargs[2])
 	elseif action == "language" then
 		commands.language(opts.fargs[2])
 	else
@@ -64,7 +65,7 @@ vim.api.nvim_create_user_command("Pitaco", function(opts)
 end, {
 	nargs = "*", -- Allows for subcommands
 	complete = function() -- Autocomplete suggestions
-		return {
+		local items = {
 			"review",
 			"diff",
 			"file",
@@ -77,5 +78,16 @@ end, {
 			"models",
 			"language",
 		}
+
+		local line = vim.fn.getcmdline()
+		if line:match("^%s*Pitaco%s+models%s+") then
+			local scopes = { "default" }
+			for _, scope in ipairs(config.list_feature_scopes()) do
+				table.insert(scopes, scope)
+			end
+			return scopes
+		end
+
+		return items
 	end,
 })

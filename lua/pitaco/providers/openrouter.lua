@@ -20,7 +20,7 @@ end
 
 function M.get_model(scope)
 	local config = require("pitaco.config")
-	return config.get_openrouter_model(scope)
+	return config.get_model("openrouter", scope)
 end
 
 function M.build_chat_request(system_prompt, messages, max_tokens, scope)

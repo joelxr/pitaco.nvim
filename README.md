@@ -8,7 +8,7 @@ Welcome to the **Pitaco** Neovim plugin! This is an experimental plugin designed
 - **Local codebase indexing**: Build and refresh semantic repository context with `:Pitaco index` or `:PitacoIndex`.
 - **Diagnostics workflow**: Publish findings through Neovim diagnostics, clear all findings with `:Pitaco clear`, clear the current line with `:Pitaco clearLine`, or insert a diagnostics summary comment with `:Pitaco comment`.
 - **AI-assisted commits**: Generate commit messages from current git changes with `:Pitaco commit`.
-- **Runtime model switching**: Pick and persist provider/model selections with `:Pitaco models`.
+- **Runtime model switching**: Pick and persist provider/model selections with `:Pitaco models [scope]`.
 - **Session language override**: Inspect or override the active response language with `:Pitaco language [value]`.
 - **Built-in health checks**: Validate provider setup and dependencies with `:Pitaco health`.
 
@@ -27,14 +27,14 @@ require('lazy').setup({
         -- optional: improved commit UI
         'MunifTanjim/nui.nvim',
     },
-    config = function()
-        require('pitaco').setup({
-            -- minimal configuration, see below for more options
-            openai_model_id = "gpt-4.1-mini",
-            provider = "openai",
-        })
-    end,
-})
+        config = function()
+            require('pitaco').setup({
+                -- minimal configuration, see below for more options
+                provider = "openai",
+                model_id = "gpt-4.1-mini",
+            })
+        end,
+    })
 ```
 
 Then, restart Neovim and run `:Lazy install`.
@@ -44,7 +44,7 @@ Pitaco has the following dependencies:
 - `curl`
 
 Optional dependency:
-- `MunifTanjim/nui.nvim` (required for `:Pitaco models`, and used for an enhanced `:Pitaco commit` UI with fallback if missing)
+- `MunifTanjim/nui.nvim` (required for `:Pitaco models [scope]`, and used for an enhanced `:Pitaco commit` UI with fallback if missing)
 
 ## Usage 🛠️
 
@@ -60,7 +60,7 @@ Once installed, you can use the following commands to interact with Pitaco:
 - `:Pitaco comment` - Add a comment under the current line with the Pitaco diagnostics summary.
 - `:Pitaco commit` - Generate a commit message from git changes and confirm the commit.
 - `:Pitaco health` - Run Pitaco checks with `:checkhealth pitaco`.
-- `:Pitaco models` - Open a model picker and switch provider/model on the fly.
+- `:Pitaco models [default|scope]` - Open a model picker for the base config or a feature scope such as `review` or `commit`.
 - `:Pitaco language [value]` - Show current language, or override it for this Neovim session.
   - Use `:Pitaco language default` (or `reset`) to clear session override and return to setup value.
 
@@ -85,25 +85,22 @@ export OPENROUTER_API_KEY="your-openrouter-api-key"
 > **Disclaimer**: Currently, Pitaco only supports those providers. However, support for additional models is planned in the roadmap.
 
 For `ollama`, no API key is required. You may set:
-- `ollama_model_id` (default: `llama3.1`)
+- `model_id` (default: `llama3.1` when `provider = "ollama"`)
 - `ollama_url` (default: `http://localhost:11434`)
 
 You can configure Pitaco by adding the following to your Neovim configuration file:
 
 ```lua
 require('pitaco').setup({
-    openai_model_id = "gpt-5-mini",
-    anthropic_model_id = "claude-haiku-4-5",
-    openrouter_model_id = "openrouter/deepseek/deepseek-chat-v3-0324:free",
-    ollama_model_id = "llama3.1",
-    ollama_url = "http://localhost:11434",
     provider = "anthropic", -- Base/default provider used when a feature does not override it
+    model_id = "claude-haiku-4-5", -- Base/default model for the selected provider
+    ollama_url = "http://localhost:11434",
     language = "english",
     review_additional_instruction = nil,
     commit_additional_instruction = nil,
     debug = false, -- Enable request/response debug logs via vim.notify
     commit_keymap = "<leader>at", -- Optional mapping for :Pitaco commit
-    persist_model_selection = true, -- Save :Pitaco models selection in state file
+    persist_model_selection = true, -- Save :Pitaco models [scope] selections in the state file
     features = {
         review = {
             provider = "openrouter",
@@ -134,9 +131,10 @@ You can temporarily override it during the current Neovim session with:
 `additional_instruction` is still accepted as a backward-compatible alias for `review_additional_instruction`.
 
 Provider/model selection resolves like this:
-- Base defaults come from `provider`, `openai_model_id`, `anthropic_model_id`, `openrouter_model_id`, and `ollama_model_id`.
+- Base defaults come from `provider` and `model_id`.
 - Feature-specific overrides can be set under `features.<name>`.
-- Each feature may set `provider` and either a generic `model_id` or a provider-specific key such as `openai_model_id`.
+- Each feature may set `provider` and `model_id`.
+- If a feature changes `provider` without setting `model_id`, Pitaco falls back to that provider's built-in default model.
 - `review` and `commit` already use scoped resolution, and future features can reuse the same mechanism.
 
 Example with base defaults plus per-feature overrides:
@@ -144,8 +142,7 @@ Example with base defaults plus per-feature overrides:
 ```lua
 require("pitaco").setup({
     provider = "anthropic",
-    anthropic_model_id = "claude-haiku-4-5",
-    openai_model_id = "gpt-5-mini",
+    model_id = "claude-haiku-4-5",
     features = {
         review = {
             provider = "anthropic",
@@ -159,12 +156,13 @@ require("pitaco").setup({
 })
 ```
 
-For compatibility, flat aliases such as `review_provider`, `review_model_id`, `commit_provider`, and `commit_model_id` are also accepted, but `features = { ... }` is the preferred format going forward.
+Flat aliases such as `review_provider`, `review_model_id`, `commit_provider`, and `commit_model_id` are also accepted, but `features = { ... }` is the preferred format going forward.
 
-`persist_model_selection` stores selected provider/model in:
+`persist_model_selection` stores base and scoped provider/model selections in:
 - `stdpath("state") .. "/pitaco-model-state.json"`
 
-`:Pitaco models` changes the base/default provider and model. Feature-specific overrides from `features.<name>` still take precedence for those scopes.
+`:Pitaco models` changes the base/default provider and model.
+`:Pitaco models commit` or `:Pitaco models review` changes that feature's scoped provider/model override and shows the current selection in the picker header.
 
 ### Repository-aware review
 

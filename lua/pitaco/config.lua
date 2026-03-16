@@ -37,22 +37,6 @@ local function non_empty_string(value)
 	return type(value) == "string" and value ~= ""
 end
 
-local function provider_model_var_name(provider)
-	if provider == "openai" then
-		return "pitaco_openai_model_id"
-	end
-	if provider == "anthropic" then
-		return "pitaco_anthropic_model_id"
-	end
-	if provider == "openrouter" then
-		return "pitaco_openrouter_model_id"
-	end
-	if provider == "ollama" then
-		return "pitaco_ollama_model_id"
-	end
-	return nil
-end
-
 local function scope_label(scope)
 	return normalize_scope(scope) or "default"
 end
@@ -247,18 +231,10 @@ function M.get_model(provider, scope)
 		if non_empty_string(overrides.model_id) then
 			return overrides.model_id
 		end
-
-		local scoped_key = provider .. "_model_id"
-		if non_empty_string(overrides[scoped_key]) then
-			return overrides[scoped_key]
-		end
 	end
 
-	local var_name = provider_model_var_name(provider)
-	local model = var_name ~= nil and vim.g[var_name] or nil
-
-	if non_empty_string(model) then
-		return model
+	if provider == vim.g.pitaco_provider and non_empty_string(vim.g.pitaco_model_id) then
+		return vim.g.pitaco_model_id
 	end
 
 	local fallback = DEFAULT_MODELS[provider]
@@ -280,41 +256,8 @@ function M.get_model(provider, scope)
 	return nil
 end
 
-function M.get_openai_model(scope)
-	local model = M.get_model("openai", scope)
-
-	if model ~= nil then
-		return model
-	end
-	return DEFAULT_MODELS.openai
-end
-
-function M.get_openrouter_model(scope)
-	local model = M.get_model("openrouter", scope)
-	if model ~= nil then
-		return model
-	end
-	return DEFAULT_MODELS.openrouter
-end
-
-function M.get_ollama_model(scope)
-	local model = M.get_model("ollama", scope)
-	if model ~= nil then
-		return model
-	end
-	return DEFAULT_MODELS.ollama
-end
-
 function M.get_ollama_url()
 	return vim.g.pitaco_ollama_url or "http://localhost:11434"
-end
-
-function M.get_anthropic_model(scope)
-	local model = M.get_model("anthropic", scope)
-	if model ~= nil then
-		return model
-	end
-	return DEFAULT_MODELS.anthropic
 end
 
 return M

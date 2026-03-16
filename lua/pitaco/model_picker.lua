@@ -1,5 +1,6 @@
 local M = {}
 
+local config = require("pitaco.config")
 local model_state = require("pitaco.model_state")
 local progress = require("pitaco.progress")
 local curl_json
@@ -15,6 +16,35 @@ local DEFAULT_MODELS = {
 
 local function is_non_empty_string(value)
 	return type(value) == "string" and value ~= ""
+end
+
+local function normalize_scope(scope)
+	if type(scope) ~= "string" then
+		return nil
+	end
+
+	local trimmed = vim.trim(scope)
+	if trimmed == "" then
+		return nil
+	end
+
+	local lowered = trimmed:lower()
+	if lowered == "default" or lowered == "base" or lowered == "global" then
+		return nil
+	end
+
+	return trimmed
+end
+
+local function scope_label(scope)
+	return normalize_scope(scope) or "default"
+end
+
+local function current_selection(scope)
+	local normalized_scope = normalize_scope(scope)
+	local provider = config.get_provider(normalized_scope)
+	local model_id = provider and config.get_model(provider, normalized_scope) or nil
+	return normalized_scope, provider, model_id
 end
 
 local function unique_models(models, current_model)
@@ -41,22 +71,6 @@ local function sorted_strings(items)
 		return a < b
 	end)
 	return items
-end
-
-local function get_current_model(provider)
-	if provider == "openai" then
-		return vim.g.pitaco_openai_model_id
-	end
-	if provider == "anthropic" then
-		return vim.g.pitaco_anthropic_model_id
-	end
-	if provider == "openrouter" then
-		return vim.g.pitaco_openrouter_model_id
-	end
-	if provider == "ollama" then
-		return vim.g.pitaco_ollama_model_id
-	end
-	return nil
 end
 
 local function get_provider_status(provider)
@@ -319,9 +333,9 @@ local function fetch_openrouter_costs()
 	return costs
 end
 
-local function build_entries()
+local function build_entries(scope)
 	local entries = {}
-	local selected_provider = vim.g.pitaco_provider
+	local _, selected_provider, selected_model = current_selection(scope)
 
 	local openrouter_balance = fetch_openrouter_credits()
 	local openai_balance = fetch_openai_credits()
@@ -329,7 +343,7 @@ local function build_entries()
 
 	for _, provider in ipairs(PROVIDERS) do
 		local provider_ready, provider_hint = get_provider_status(provider)
-		local current_model = get_current_model(provider)
+		local current_model = selected_provider == provider and selected_model or nil
 		local models = provider_models(provider, current_model)
 		local provider_balance = "-"
 
@@ -359,7 +373,7 @@ local function build_entries()
 				end
 			end
 
-			local is_selected = (selected_provider == provider) and (current_model == model_id)
+			local is_selected = (selected_provider == provider) and (selected_model == model_id)
 			local status = provider_ready and "ready" or ("missing " .. provider_hint)
 			local display_model = display_model_id(provider, model_id)
 			local meta = { status }
@@ -422,8 +436,11 @@ local function entry_lines(entry, is_active)
 	return line
 end
 
-local function render_entries(buf, entries, index, query)
+local function render_entries(buf, entries, index, query, scope, provider, model_id)
 	local lines = {
+		("Target: %s"):format(scope_label(scope)),
+		("Current: %s / %s"):format(provider or "unknown", model_id or "unknown"),
+		"",
 		("Search: %s"):format(query ~= "" and query or "(none)"),
 		"",
 	}
@@ -442,46 +459,52 @@ local function render_entries(buf, entries, index, query)
 	vim.bo[buf].modifiable = false
 end
 
-local function apply_selection(choice)
+local function apply_selection(choice, scope)
 	if choice == nil then
 		return
 	end
 
-	vim.g.pitaco_provider = choice.provider
-	if choice.provider == "openai" then
-		vim.g.pitaco_openai_model_id = choice.model_id
-	elseif choice.provider == "anthropic" then
-		vim.g.pitaco_anthropic_model_id = choice.model_id
-	elseif choice.provider == "openrouter" then
-		vim.g.pitaco_openrouter_model_id = choice.model_id
-	elseif choice.provider == "ollama" then
-		vim.g.pitaco_ollama_model_id = choice.model_id
+	local normalized_scope = normalize_scope(scope)
+	if normalized_scope == nil then
+		vim.g.pitaco_provider = choice.provider
+		vim.g.pitaco_model_id = choice.model_id
+	else
+		vim.g.pitaco_features = vim.g.pitaco_features or {}
+		vim.g.pitaco_features[normalized_scope] = vim.g.pitaco_features[normalized_scope] or {}
+		vim.g.pitaco_features[normalized_scope].provider = choice.provider
+		vim.g.pitaco_features[normalized_scope].model_id = choice.model_id
 	end
 
 	if vim.g.pitaco_persist_model_selection ~= false then
-		local ok, err = model_state.persist_selection(choice.provider, choice.model_id)
+		local ok, err
+		if normalized_scope == nil then
+			ok, err = model_state.persist_selection(choice.provider, choice.model_id)
+		else
+			ok, err = model_state.persist_feature_selection(normalized_scope, choice.provider, choice.model_id)
+		end
 		if not ok then
 			vim.notify("Pitaco models: failed to persist selection: " .. tostring(err), vim.log.levels.WARN)
 		end
 	end
 
 	vim.notify(
-		("Pitaco active model: %s (%s)"):format(choice.model_id, choice.provider),
+		("Pitaco active model for %s: %s (%s)"):format(scope_label(scope), choice.model_id, choice.provider),
 		vim.log.levels.INFO
 	)
 end
 
-function M.open()
+function M.open(scope)
+	local normalized_scope = normalize_scope(scope)
 	local ok_popup, Popup = pcall(require, "nui.popup")
 	if not ok_popup then
 		vim.notify("Pitaco models: nui.nvim is required for model picker", vim.log.levels.ERROR)
 		return
 	end
 
-	progress.update("Loading models", 0, 1)
+	progress.update(("Loading models for %s"):format(scope_label(normalized_scope)), 0, 1)
 	vim.cmd("redraw")
 	vim.defer_fn(function()
-		local ok_entries, entries = pcall(build_entries)
+		local ok_entries, entries = pcall(build_entries, normalized_scope)
 		progress.stop()
 		if not ok_entries then
 			vim.notify("Pitaco models: failed to load models", vim.log.levels.ERROR)
@@ -502,7 +525,7 @@ function M.open()
 			focusable = true,
 			border = {
 				style = "rounded",
-				text = { top = "Pitaco models", top_align = "center" },
+				text = { top = ("Pitaco models (%s)"):format(scope_label(normalized_scope)), top_align = "center" },
 			},
 			position = "50%",
 			size = {
@@ -526,12 +549,13 @@ function M.open()
 		local index = selected_index(filtered_entries)
 
 		local function sync_cursor()
-			local cursor_line = #filtered_entries == 0 and 3 or (index + 2)
+			local cursor_line = #filtered_entries == 0 and 6 or (index + 5)
 			vim.api.nvim_win_set_cursor(win, { cursor_line, 0 })
 		end
 
 		local function render()
-			render_entries(buf, filtered_entries, index, query)
+			local _, provider, model_id = current_selection(normalized_scope)
+			render_entries(buf, filtered_entries, index, query, normalized_scope, provider, model_id)
 			sync_cursor()
 		end
 
@@ -582,11 +606,11 @@ function M.open()
 			end
 			local choice = filtered_entries[index]
 			close()
-			apply_selection(choice)
+			apply_selection(choice, normalized_scope)
 		end
 
 		local function search()
-			local value = vim.fn.input("Pitaco models search: ", query)
+			local value = vim.fn.input(("Pitaco models search (%s): "):format(scope_label(normalized_scope)), query)
 			if value == nil then
 				return
 			end
