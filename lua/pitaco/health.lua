@@ -78,20 +78,22 @@ local function check_nui()
   return false
 end
 
-local function check_provider_config()
-  local provider = require("pitaco.config").get_provider()
+local function check_provider_config(scope)
+  local config = require("pitaco.config")
+  local label = scope == nil and "default" or scope
+  local provider = config.get_provider(scope)
   if not provider or provider == "" then
-    vim.health.warn("No provider configured in setup()")
+    vim.health.warn(("No provider configured for %s scope"):format(label))
     return false
   end
 
   if not VALID_PROVIDERS[provider] then
-    vim.health.error(("Invalid provider configured: %s"):format(provider))
+    vim.health.error(("Invalid provider configured for %s scope: %s"):format(label, provider))
     vim.health.info("Valid providers: openai, anthropic, openrouter, ollama")
     return false
   end
 
-  vim.health.ok(("Provider configured: %s"):format(provider))
+  vim.health.ok(("Provider configured for %s scope: %s"):format(label, provider))
   return true, provider
 end
 
@@ -149,6 +151,22 @@ local function check_ollama_url()
   return false
 end
 
+local function check_scope_resolution(scope)
+  local config = require("pitaco.config")
+  local label = scope == nil and "default" or scope
+  local provider = config.get_provider(scope)
+  if not VALID_PROVIDERS[provider] then
+    return
+  end
+
+  local model = config.get_model(provider, scope)
+  if is_non_empty_string(model) then
+    vim.health.ok(("%s scope resolves to %s / %s"):format(label, provider, model))
+  else
+    vim.health.warn(("%s scope did not resolve a model"):format(label))
+  end
+end
+
 local function check_all_provider_setups(selected_provider)
   vim.health.start("Provider setup")
 
@@ -181,14 +199,23 @@ local function check_all_provider_setups(selected_provider)
 end
 
 function M.check()
+  local config = require("pitaco.config")
   vim.health.start("Pitaco.nvim health check")
 
   check_plenary()
   check_nui()
   check_curl()
   check_context_engine()
-  local _, provider = check_provider_config()
+  local _, provider = check_provider_config(nil)
+  for _, scope in ipairs(config.list_feature_scopes()) do
+    check_provider_config(scope)
+  end
   check_all_provider_setups(provider)
+  vim.health.start("Resolved model scopes")
+  check_scope_resolution(nil)
+  for _, scope in ipairs(config.list_feature_scopes()) do
+    check_scope_resolution(scope)
+  end
 end
 
 return M

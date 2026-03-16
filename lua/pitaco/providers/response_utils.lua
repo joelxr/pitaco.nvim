@@ -1,5 +1,18 @@
 local M = {}
 
+local function first_choice(response)
+	if type(response) ~= "table" or type(response.choices) ~= "table" then
+		return nil
+	end
+
+	local choice = response.choices[1]
+	if type(choice) ~= "table" then
+		return nil
+	end
+
+	return choice
+end
+
 local function append_text(parts, value)
 	if type(value) ~= "string" then
 		return
@@ -41,16 +54,37 @@ function M.join_text(value)
 end
 
 function M.choice_message_text(response)
-	if type(response) ~= "table" or type(response.choices) ~= "table" then
-		return ""
-	end
-
-	local choice = response.choices[1]
+	local choice = first_choice(response)
 	if type(choice) ~= "table" or type(choice.message) ~= "table" then
 		return ""
 	end
 
 	return M.join_text(choice.message.content)
+end
+
+function M.choice_finish_reason(response)
+	local choice = first_choice(response)
+	if type(choice) ~= "table" or type(choice.finish_reason) ~= "string" then
+		return nil
+	end
+
+	return choice.finish_reason
+end
+
+function M.choice_reasoning_text(response)
+	local choice = first_choice(response)
+	if type(choice) ~= "table" then
+		return ""
+	end
+
+	if type(choice.message) == "table" then
+		local message_reasoning = M.join_text(choice.message.reasoning)
+		if message_reasoning ~= "" then
+			return message_reasoning
+		end
+	end
+
+	return M.join_text(choice.reasoning)
 end
 
 function M.anthropic_text(response)

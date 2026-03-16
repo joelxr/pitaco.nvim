@@ -18,24 +18,13 @@ function M.get_api_key()
 	return nil
 end
 
-function M.get_model()
-	local model = vim.g.pitaco_openai_model_id
-
-	if model ~= nil then
-		return model
-	end
-
-	if vim.g.pitaco_model_id_complained == nil then
-		local message = "No model specified. Please set openai_model_id in the setup table. Using default value for now"
-		vim.fn.confirm(message, "&OK", 1, "Warning")
-		vim.g.pitaco_model_id_complained = 1
-	end
-
-	return "gpt-4.1-mini"
+function M.get_model(scope)
+	local config = require("pitaco.config")
+	return config.get_openai_model(scope)
 end
 
-function M.build_chat_request(system_prompt, messages, max_tokens)
-	local model = M.get_model()
+function M.build_chat_request(system_prompt, messages, max_tokens, scope)
+	local model = M.get_model(scope)
 	local final_messages = {}
 
 	if system_prompt ~= nil and system_prompt ~= "" then

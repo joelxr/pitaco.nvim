@@ -4,6 +4,7 @@ local provider_factory = require("pitaco.providers.factory")
 local config = require("pitaco.config")
 local progress = require("pitaco.progress")
 local log = require("pitaco.log")
+local response_utils = require("pitaco.providers.response_utils")
 
 local function trim_text(text)
 	if vim.trim ~= nil then
@@ -56,6 +57,33 @@ local function build_commit_system_prompt()
 		prompt = prompt .. "\n" .. additional_instruction
 	end
 	return prompt
+end
+
+local function should_retry_commit_generation(raw_text, response)
+	if trim_text(raw_text or "") ~= "" then
+		return false
+	end
+
+	return response_utils.choice_finish_reason(response) == "length"
+end
+
+local function build_commit_parse_error(response)
+	local finish_reason = response_utils.choice_finish_reason(response)
+	local reasoning = response_utils.choice_reasoning_text(response)
+
+	if finish_reason == "length" and reasoning ~= "" then
+		return "model returned reasoning but no final commit message before reaching max_tokens; try a non-reasoning model for commits"
+	end
+
+	if finish_reason == "length" then
+		return "model stopped before returning a commit message; try increasing max_tokens or switching commit models"
+	end
+
+	if reasoning ~= "" then
+		return "model returned reasoning but no final commit message; try a non-reasoning model for commits"
+	end
+
+	return "failed to parse commit message"
 end
 
 local function set_preview_keymaps(buf, win)
@@ -250,7 +278,8 @@ local function close_preview(win)
 end
 
 function M.run()
-	local provider = provider_factory.create_provider(config.get_provider())
+	local scope = "commit"
+	local provider = provider_factory.create_provider(config.get_provider(scope), scope)
 
 	local root_lines, root_code = git_systemlist({ "git", "rev-parse", "--show-toplevel" })
 	if root_code ~= 0 or #root_lines == 0 then
@@ -291,108 +320,125 @@ function M.run()
 		},
 	}
 
-	progress.update("Generating commit message", 1, 1)
-	local request_json = provider.build_chat_request(system_prompt, messages, 256)
-	log.debug(("Dispatching commit request via provider '%s'"):format(provider.name or "unknown"))
-	log.preview_json("commit request payload", request_json)
-	provider.request(request_json, function(response, error_message)
-		vim.schedule(function()
-			if error_message ~= nil then
-				log.preview_text("commit request error", error_message)
-				progress.stop()
-				vim.notify("Pitaco commit: " .. error_message, vim.log.levels.ERROR)
-				return
-			end
+	local commit_token_attempts = { 256, 512 }
+	local function request_commit_message(attempt)
+		local max_tokens = commit_token_attempts[attempt] or commit_token_attempts[#commit_token_attempts]
+		progress.update("Generating commit message", attempt, #commit_token_attempts)
+		local request_json = provider.build_chat_request(system_prompt, messages, max_tokens)
+		log.debug(("Dispatching commit request via provider '%s'"):format(provider.name or "unknown"))
+		log.preview_json("commit request payload", request_json)
 
-			local message = sanitize_commit_message(provider.extract_text(response))
-			log.preview_text("commit response text", provider.extract_text(response))
-			if message == nil then
-				progress.stop()
-				vim.notify("Pitaco commit: failed to parse commit message", vim.log.levels.ERROR)
-				return
-			end
-
-			local diff_args = needs_stage and { "git", "-C", repo_root, "diff" }
-				or { "git", "-C", repo_root, "diff", "--staged" }
-
-			local diff_lines, diff_code = git_systemlist(diff_args)
-			local layout = build_preview_layout()
-
-			local title = needs_stage and "Pitaco Diff (unstaged)" or "Pitaco Diff (staged)"
-			local preview_handle = nil
-
-			local function cancel_commit(msg, level)
-				close_preview(preview_handle)
-				progress.stop()
-				vim.notify(msg, level)
-			end
-
-			local function proceed_with_message(input)
-				if input == nil then
-					cancel_commit("Pitaco commit: canceled", vim.log.levels.INFO)
+		provider.request(request_json, function(response, error_message)
+			vim.schedule(function()
+				if error_message ~= nil then
+					log.preview_text("commit request error", error_message)
+					progress.stop()
+					vim.notify("Pitaco commit: " .. error_message, vim.log.levels.ERROR)
 					return
 				end
 
-				local edited = trim_text(input)
-				if edited == "" then
-					cancel_commit("Pitaco commit: empty commit message", vim.log.levels.ERROR)
+				local raw_text = provider.extract_text(response)
+				local message = sanitize_commit_message(raw_text)
+				log.preview_text("commit response text", raw_text)
+				if message == nil and attempt < #commit_token_attempts and should_retry_commit_generation(raw_text, response) then
+					log.debug(("Retrying commit generation after empty response (finish_reason=%s, attempt=%d)"):format(
+						tostring(response_utils.choice_finish_reason(response)),
+						attempt
+					))
+					request_commit_message(attempt + 1)
 					return
 				end
 
-				message = sanitize_commit_message(edited) or edited
-
-				local message_escaped = message:gsub('"', '\\"')
-				local command_lines = {}
-
-				if needs_stage then
-					table.insert(command_lines, "git add -A")
-				end
-				table.insert(command_lines, 'git commit -m "' .. message_escaped .. '"')
-
-				local prompt = "Run:\n" .. table.concat(command_lines, "\n")
-				if has_unstaged and not needs_stage then
-					prompt = prompt .. "\n\nNote: unstaged changes exist and will not be included."
-				end
-
-				local choice = vim.fn.confirm(prompt, "&Yes\n&No", 2)
-				if choice ~= 1 then
-					cancel_commit("Pitaco commit: canceled", vim.log.levels.INFO)
+				if message == nil then
+					progress.stop()
+					vim.notify("Pitaco commit: " .. build_commit_parse_error(response), vim.log.levels.ERROR)
 					return
 				end
 
-				if needs_stage then
-					vim.fn.system({ "git", "-C", repo_root, "add", "-A" })
-					if vim.v.shell_error ~= 0 then
-						cancel_commit("Pitaco commit: git add failed", vim.log.levels.ERROR)
+				local diff_args = needs_stage and { "git", "-C", repo_root, "diff" }
+					or { "git", "-C", repo_root, "diff", "--staged" }
+
+				local diff_lines, diff_code = git_systemlist(diff_args)
+				local layout = build_preview_layout()
+
+				local title = needs_stage and "Pitaco Diff (unstaged)" or "Pitaco Diff (staged)"
+				local preview_handle = nil
+
+				local function cancel_commit(msg, level)
+					close_preview(preview_handle)
+					progress.stop()
+					vim.notify(msg, level)
+				end
+
+				local function proceed_with_message(input)
+					if input == nil then
+						cancel_commit("Pitaco commit: canceled", vim.log.levels.INFO)
 						return
 					end
+
+					local edited = trim_text(input)
+					if edited == "" then
+						cancel_commit("Pitaco commit: empty commit message", vim.log.levels.ERROR)
+						return
+					end
+
+					message = sanitize_commit_message(edited) or edited
+
+					local message_escaped = message:gsub('"', '\\"')
+					local command_lines = {}
+
+					if needs_stage then
+						table.insert(command_lines, "git add -A")
+					end
+					table.insert(command_lines, 'git commit -m "' .. message_escaped .. '"')
+
+					local prompt = "Run:\n" .. table.concat(command_lines, "\n")
+					if has_unstaged and not needs_stage then
+						prompt = prompt .. "\n\nNote: unstaged changes exist and will not be included."
+					end
+
+					local choice = vim.fn.confirm(prompt, "&Yes\n&No", 2)
+					if choice ~= 1 then
+						cancel_commit("Pitaco commit: canceled", vim.log.levels.INFO)
+						return
+					end
+
+					if needs_stage then
+						vim.fn.system({ "git", "-C", repo_root, "add", "-A" })
+						if vim.v.shell_error ~= 0 then
+							cancel_commit("Pitaco commit: git add failed", vim.log.levels.ERROR)
+							return
+						end
+					end
+
+					vim.fn.system({ "git", "-C", repo_root, "commit", "-m", message })
+					if vim.v.shell_error ~= 0 then
+						cancel_commit("Pitaco commit: git commit failed", vim.log.levels.ERROR)
+						return
+					end
+
+					close_preview(preview_handle)
+					progress.stop()
+					vim.notify("Pitaco commit: created commit", vim.log.levels.INFO)
 				end
 
-				vim.fn.system({ "git", "-C", repo_root, "commit", "-m", message })
-				if vim.v.shell_error ~= 0 then
-					cancel_commit("Pitaco commit: git commit failed", vim.log.levels.ERROR)
-					return
+				if diff_code == 0 and #diff_lines > 0 then
+					local used_nui = try_open_nui_commit_ui(message, diff_lines, title, proceed_with_message, function()
+						cancel_commit("Pitaco commit: canceled", vim.log.levels.INFO)
+					end)
+					if used_nui then
+						return
+					end
+
+					preview_handle = open_diff_preview(diff_lines, title, layout)
 				end
 
-				close_preview(preview_handle)
-				progress.stop()
-				vim.notify("Pitaco commit: created commit", vim.log.levels.INFO)
-			end
-
-			if diff_code == 0 and #diff_lines > 0 then
-				local used_nui = try_open_nui_commit_ui(message, diff_lines, title, proceed_with_message, function()
-					cancel_commit("Pitaco commit: canceled", vim.log.levels.INFO)
-				end)
-				if used_nui then
-					return
-				end
-
-				preview_handle = open_diff_preview(diff_lines, title, layout)
-			end
-
-			vim.ui.input({ prompt = "Commit message:", default = message }, proceed_with_message)
+				vim.ui.input({ prompt = "Commit message:", default = message }, proceed_with_message)
+			end)
 		end)
-	end)
+	end
+
+	request_commit_message(1)
 end
 
 return M

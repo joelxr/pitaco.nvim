@@ -120,13 +120,23 @@ file:
         openrouter_model_id = "openrouter/deepseek/deepseek-chat-v3-0324:free",
         ollama_model_id = "llama3.1",
         ollama_url = "http://localhost:11434",
-        provider = "anthropic", -- "openai", "anthropic", "openrouter", "ollama"
+        provider = "anthropic", -- Base/default provider used when a feature does not override it
         language = "english",
         review_additional_instruction = nil,
         commit_additional_instruction = nil,
         debug = false, -- Enable request/response debug logs via vim.notify
         commit_keymap = "<leader>at", -- Optional mapping for :Pitaco commit
         persist_model_selection = true, -- Save :Pitaco models selection in state file
+        features = {
+            review = {
+                provider = "openrouter",
+                model_id = "openrouter/deepseek/deepseek-chat-v3-0324:free",
+            },
+            commit = {
+                provider = "openai",
+                model_id = "gpt-5-mini",
+            },
+        },
         context_enabled = true,
         context_cli_cmd = "pitaco-indexer", -- Or { "node", "/absolute/path/to/indexer/src/cli.js" }
         context_max_chunks = 6,
@@ -148,8 +158,44 @@ Neovim session with:
 `additional_instruction` is still accepted as a backward-compatible alias for
 `review_additional_instruction`.
 
+Provider/model selection resolves like this:
+- Base defaults come from `provider`, `openai_model_id`,
+  `anthropic_model_id`, `openrouter_model_id`, and `ollama_model_id`.
+- Feature-specific overrides can be set under `features.<name>`.
+- Each feature may set `provider` and either a generic `model_id` or a
+  provider-specific key such as `openai_model_id`.
+- `review` and `commit` already use scoped resolution, and future features can
+  reuse the same mechanism.
+
+Example with base defaults plus per-feature overrides:
+
+>lua
+    require("pitaco").setup({
+        provider = "anthropic",
+        anthropic_model_id = "claude-haiku-4-5",
+        openai_model_id = "gpt-5-mini",
+        features = {
+            review = {
+                provider = "anthropic",
+                model_id = "claude-haiku-4-5",
+            },
+            commit = {
+                provider = "openai",
+                model_id = "gpt-5-mini",
+            },
+        },
+    })
+<
+
+For compatibility, flat aliases such as `review_provider`,
+`review_model_id`, `commit_provider`, and `commit_model_id` are also accepted,
+but `features = { ... }` is the preferred format going forward.
+
 `persist_model_selection` stores selected provider/model in: -
 `stdpath("state") .. "/pitaco-model-state.json"`
+
+`:Pitaco models` changes the base/default provider and model. Feature-specific
+overrides from `features.<name>` still take precedence for those scopes.
 
 
 REPOSITORY-AWARE REVIEW ~

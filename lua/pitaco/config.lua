@@ -1,5 +1,78 @@
 local M = {}
 
+local DEFAULT_MODELS = {
+	openai = "gpt-5-mini",
+	anthropic = "claude-haiku-4-5",
+	openrouter = "openrouter/deepseek/deepseek-chat-v3-0324:free",
+	ollama = "llama3.1",
+}
+
+local function normalize_scope(scope)
+	if type(scope) ~= "string" or scope == "" then
+		return nil
+	end
+	return scope
+end
+
+local function get_feature_overrides(scope)
+	local normalized = normalize_scope(scope)
+	if normalized == nil then
+		return nil
+	end
+
+	local features = vim.g.pitaco_features
+	if type(features) ~= "table" then
+		return nil
+	end
+
+	local overrides = features[normalized]
+	if type(overrides) ~= "table" then
+		return nil
+	end
+
+	return overrides
+end
+
+local function non_empty_string(value)
+	return type(value) == "string" and value ~= ""
+end
+
+local function provider_model_var_name(provider)
+	if provider == "openai" then
+		return "pitaco_openai_model_id"
+	end
+	if provider == "anthropic" then
+		return "pitaco_anthropic_model_id"
+	end
+	if provider == "openrouter" then
+		return "pitaco_openrouter_model_id"
+	end
+	if provider == "ollama" then
+		return "pitaco_ollama_model_id"
+	end
+	return nil
+end
+
+local function scope_label(scope)
+	return normalize_scope(scope) or "default"
+end
+
+local function warn_default_model(provider, scope, message)
+	local complaints = vim.g.pitaco_model_complaints
+	if type(complaints) ~= "table" then
+		complaints = {}
+	end
+
+	local key = ("%s:%s"):format(provider, scope_label(scope))
+	if complaints[key] then
+		return
+	end
+
+	vim.fn.confirm(message, "&OK", 1, "Warning")
+	complaints[key] = true
+	vim.g.pitaco_model_complaints = complaints
+end
+
 function M.get_system_prompt()
 	local default_system_prompt = [[
 You are an expert code reviewer.
@@ -49,7 +122,11 @@ function M.get_commit_system_prompt()
 You are a Git commit message generator.
 Given a git diff, write a concise commit subject line.
 Rules:
+- Return only the final answer.
+- Do not include reasoning, analysis, thinking, or explanations.
 - Output only the subject line, no quotes, no markdown.
+- No preamble.
+- One line only.
 - Use imperative mood.
 - Keep it between 50 and 72 characters.
 - No trailing period.
@@ -107,7 +184,36 @@ function M.get_commit_additional_instruction()
 	return vim.g.pitaco_commit_additional_instruction or ""
 end
 
-function M.get_provider()
+function M.get_feature_overrides(scope)
+	local overrides = get_feature_overrides(scope)
+	if overrides == nil then
+		return nil
+	end
+	return vim.deepcopy(overrides)
+end
+
+function M.list_feature_scopes()
+	local features = vim.g.pitaco_features
+	if type(features) ~= "table" then
+		return {}
+	end
+
+	local scopes = {}
+	for scope, overrides in pairs(features) do
+		if type(scope) == "string" and scope ~= "" and type(overrides) == "table" then
+			table.insert(scopes, scope)
+		end
+	end
+
+	table.sort(scopes)
+	return scopes
+end
+
+function M.get_provider(scope)
+	local overrides = get_feature_overrides(scope)
+	if overrides ~= nil and non_empty_string(overrides.provider) then
+		return overrides.provider
+	end
 	return vim.g.pitaco_provider
 end
 
@@ -135,74 +241,80 @@ function M.should_include_git_diff()
 	return vim.g.pitaco_context_include_git_diff ~= false
 end
 
-function M.get_openai_model()
-	local model = vim.g.pitaco_openai_model_id
+function M.get_model(provider, scope)
+	local overrides = get_feature_overrides(scope)
+	if overrides ~= nil then
+		if non_empty_string(overrides.model_id) then
+			return overrides.model_id
+		end
 
-	if model ~= nil then
+		local scoped_key = provider .. "_model_id"
+		if non_empty_string(overrides[scoped_key]) then
+			return overrides[scoped_key]
+		end
+	end
+
+	local var_name = provider_model_var_name(provider)
+	local model = var_name ~= nil and vim.g[var_name] or nil
+
+	if non_empty_string(model) then
 		return model
 	end
 
-	if vim.g.pitaco_model_id_complained == nil then
-		local message = "No model specified. Please set openai_model_id in the setup table. Using default value for now"
-		vim.fn.confirm(message, "&OK", 1, "Warning")
-		vim.g.pitaco_model_id_complained = 1
+	local fallback = DEFAULT_MODELS[provider]
+	if fallback ~= nil then
+		local message
+		if normalize_scope(scope) ~= nil then
+			message = ("No %s model specified for '%s'. Using default value for now: %s"):format(
+				provider,
+				scope,
+				fallback
+			)
+		else
+			message = ("No %s model specified. Using default value for now: %s"):format(provider, fallback)
+		end
+		warn_default_model(provider, scope, message)
+		return fallback
 	end
 
-	return "gpt-4.1-mini"
+	return nil
 end
 
-function M.get_openrouter_model()
-	local model = vim.g.pitaco_openrouter_model_id
+function M.get_openai_model(scope)
+	local model = M.get_model("openai", scope)
 
 	if model ~= nil then
 		return model
 	end
-
-	if vim.g.pitaco_openrouter_model_id_complained == nil then
-		local message =
-			"No OpenRouter model specified. Please set openrouter_model_id in the setup table. Using default value for now"
-		vim.fn.confirm(message, "&OK", 1, "Warning")
-		vim.g.pitaco_openrouter_model_id_complained = 1
-	end
-
-	return "openrouter/deepseek/deepseek-chat-v3-0324:free"
+	return DEFAULT_MODELS.openai
 end
 
-function M.get_ollama_model()
-	local model = vim.g.pitaco_ollama_model_id
-
+function M.get_openrouter_model(scope)
+	local model = M.get_model("openrouter", scope)
 	if model ~= nil then
 		return model
 	end
+	return DEFAULT_MODELS.openrouter
+end
 
-	if vim.g.pitaco_ollama_model_id_complained == nil then
-		local message = "No Ollama model specified. Using default llama3"
-		vim.fn.confirm(message, "&OK", 1, "Warning")
-		vim.g.pitaco_ollama_model_id_complained = 1
+function M.get_ollama_model(scope)
+	local model = M.get_model("ollama", scope)
+	if model ~= nil then
+		return model
 	end
-
-	return "llama3.1"
+	return DEFAULT_MODELS.ollama
 end
 
 function M.get_ollama_url()
 	return vim.g.pitaco_ollama_url or "http://localhost:11434"
 end
 
-function M.get_anthropic_model()
-	local model = vim.g.pitaco_anthropic_model_id
-
+function M.get_anthropic_model(scope)
+	local model = M.get_model("anthropic", scope)
 	if model ~= nil then
 		return model
 	end
-
-	if vim.g.pitaco_anthropic_model_id_complained == nil then
-		local message =
-			"No Anthropic model specified. Please set anthropic_model_id in the setup table. Using default value for now"
-		vim.fn.confirm(message, "&OK", 1, "Warning")
-		vim.g.pitaco_anthropic_model_id_complained = 1
-	end
-
-	return "claude-haiku-4-5"
+	return DEFAULT_MODELS.anthropic
 end
 
 return M

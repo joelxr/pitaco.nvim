@@ -4,9 +4,13 @@ Welcome to the **Pitaco** Neovim plugin! This is an experimental plugin designed
 
 ## Features ✨
 
-- **Code Review**: Get feedback on your code.
-- **AI-Powered Suggestions**: Leverage LLMs to enhance your coding practices.
-- **Seamless Integration**: Works smoothly within Neovim.
+- **Repository-aware reviews**: Review the current branch diff or the entire current file with `:Pitaco`, `:Pitaco review`, `:Pitaco diff`, `:Pitaco file`, or `:PitacoReview`.
+- **Local codebase indexing**: Build and refresh semantic repository context with `:Pitaco index` or `:PitacoIndex`.
+- **Diagnostics workflow**: Publish findings through Neovim diagnostics, clear all findings with `:Pitaco clear`, clear the current line with `:Pitaco clearLine`, or insert a diagnostics summary comment with `:Pitaco comment`.
+- **AI-assisted commits**: Generate commit messages from current git changes with `:Pitaco commit`.
+- **Runtime model switching**: Pick and persist provider/model selections with `:Pitaco models`.
+- **Session language override**: Inspect or override the active response language with `:Pitaco language [value]`.
+- **Built-in health checks**: Validate provider setup and dependencies with `:Pitaco health`.
 
 > **Note**: Pitaco uses the native Neovim diagnostics API, making it easy to integrate with other plugins such as `folke/trouble.nvim` for enhanced diagnostics visualization.
 
@@ -93,13 +97,23 @@ require('pitaco').setup({
     openrouter_model_id = "openrouter/deepseek/deepseek-chat-v3-0324:free",
     ollama_model_id = "llama3.1",
     ollama_url = "http://localhost:11434",
-    provider = "anthropic", -- "openai", "anthropic", "openrouter", "ollama"
+    provider = "anthropic", -- Base/default provider used when a feature does not override it
     language = "english",
     review_additional_instruction = nil,
     commit_additional_instruction = nil,
     debug = false, -- Enable request/response debug logs via vim.notify
     commit_keymap = "<leader>at", -- Optional mapping for :Pitaco commit
     persist_model_selection = true, -- Save :Pitaco models selection in state file
+    features = {
+        review = {
+            provider = "openrouter",
+            model_id = "openrouter/deepseek/deepseek-chat-v3-0324:free",
+        },
+        commit = {
+            provider = "openai",
+            model_id = "gpt-5-mini",
+        },
+    },
     context_enabled = true,
     context_cli_cmd = "pitaco-indexer", -- Or { "node", "/absolute/path/to/indexer/src/cli.js" }
     context_max_chunks = 6,
@@ -119,8 +133,38 @@ You can temporarily override it during the current Neovim session with:
 `commit_additional_instruction` is appended to the commit-message prompt.
 `additional_instruction` is still accepted as a backward-compatible alias for `review_additional_instruction`.
 
+Provider/model selection resolves like this:
+- Base defaults come from `provider`, `openai_model_id`, `anthropic_model_id`, `openrouter_model_id`, and `ollama_model_id`.
+- Feature-specific overrides can be set under `features.<name>`.
+- Each feature may set `provider` and either a generic `model_id` or a provider-specific key such as `openai_model_id`.
+- `review` and `commit` already use scoped resolution, and future features can reuse the same mechanism.
+
+Example with base defaults plus per-feature overrides:
+
+```lua
+require("pitaco").setup({
+    provider = "anthropic",
+    anthropic_model_id = "claude-haiku-4-5",
+    openai_model_id = "gpt-5-mini",
+    features = {
+        review = {
+            provider = "anthropic",
+            model_id = "claude-haiku-4-5",
+        },
+        commit = {
+            provider = "openai",
+            model_id = "gpt-5-mini",
+        },
+    },
+})
+```
+
+For compatibility, flat aliases such as `review_provider`, `review_model_id`, `commit_provider`, and `commit_model_id` are also accepted, but `features = { ... }` is the preferred format going forward.
+
 `persist_model_selection` stores selected provider/model in:
 - `stdpath("state") .. "/pitaco-model-state.json"`
+
+`:Pitaco models` changes the base/default provider and model. Feature-specific overrides from `features.<name>` still take precedence for those scopes.
 
 ### Repository-aware review
 

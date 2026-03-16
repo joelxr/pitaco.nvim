@@ -20,10 +20,61 @@ local default_opts = {
 	context_timeout_ms = 1500,
 	context_include_git_diff = true,
 	debug = false,
+	features = {},
 }
+
+local function extract_feature_overrides(opts)
+	local features = vim.deepcopy(opts.features or {})
+
+	local function ensure_scope(scope)
+		features[scope] = features[scope] or {}
+		return features[scope]
+	end
+
+	if opts.review_provider ~= nil then
+		ensure_scope("review").provider = opts.review_provider
+	end
+	if opts.review_model_id ~= nil then
+		ensure_scope("review").model_id = opts.review_model_id
+	end
+	if opts.review_openai_model_id ~= nil then
+		ensure_scope("review").openai_model_id = opts.review_openai_model_id
+	end
+	if opts.review_anthropic_model_id ~= nil then
+		ensure_scope("review").anthropic_model_id = opts.review_anthropic_model_id
+	end
+	if opts.review_openrouter_model_id ~= nil then
+		ensure_scope("review").openrouter_model_id = opts.review_openrouter_model_id
+	end
+	if opts.review_ollama_model_id ~= nil then
+		ensure_scope("review").ollama_model_id = opts.review_ollama_model_id
+	end
+
+	if opts.commit_provider ~= nil then
+		ensure_scope("commit").provider = opts.commit_provider
+	end
+	if opts.commit_model_id ~= nil then
+		ensure_scope("commit").model_id = opts.commit_model_id
+	end
+	if opts.commit_openai_model_id ~= nil then
+		ensure_scope("commit").openai_model_id = opts.commit_openai_model_id
+	end
+	if opts.commit_anthropic_model_id ~= nil then
+		ensure_scope("commit").anthropic_model_id = opts.commit_anthropic_model_id
+	end
+	if opts.commit_openrouter_model_id ~= nil then
+		ensure_scope("commit").openrouter_model_id = opts.commit_openrouter_model_id
+	end
+	if opts.commit_ollama_model_id ~= nil then
+		ensure_scope("commit").ollama_model_id = opts.commit_ollama_model_id
+	end
+
+	return features
+end
 
 function M.setup(opts)
 	opts = vim.tbl_deep_extend("force", default_opts, opts or {})
+	local feature_overrides = extract_feature_overrides(opts)
 	if opts.persist_model_selection ~= false then
 		local state = require("pitaco.model_state").load()
 		if type(state.provider) == "string" and state.provider ~= "" then
@@ -56,6 +107,7 @@ function M.setup(opts)
 	vim.g.pitaco_context_timeout_ms = opts.context_timeout_ms
 	vim.g.pitaco_context_include_git_diff = opts.context_include_git_diff
 	vim.g.pitaco_debug = opts.debug
+	vim.g.pitaco_features = feature_overrides
 end
 
 return M

@@ -29,7 +29,8 @@ function M.review(mode)
 		return
 	end
 
-	local provider = provider_factory.create_provider(config.get_provider())
+	local scope = "review"
+	local provider = provider_factory.create_provider(config.get_provider(scope), scope)
 	local all_requests, num_requests, line_count = provider.prepare_requests(fewshot.messages, review_mode)
 	requests.make_requests(namespace, provider, all_requests, num_requests, 0, line_count)
 end

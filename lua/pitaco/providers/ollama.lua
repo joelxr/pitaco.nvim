@@ -6,13 +6,13 @@ local response_utils = require("pitaco.providers.response_utils")
 
 M.name = "ollama"
 
-function M.get_model()
+function M.get_model(scope)
 	local config = require("pitaco.config")
-	return config.get_ollama_model()
+	return config.get_ollama_model(scope)
 end
 
-function M.build_chat_request(system_prompt, messages, max_tokens)
-	local model = M.get_model()
+function M.build_chat_request(system_prompt, messages, max_tokens, scope)
+	local model = M.get_model(scope)
 	local final_messages = {}
 
 	if system_prompt ~= nil and system_prompt ~= "" then
