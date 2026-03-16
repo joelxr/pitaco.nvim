@@ -93,6 +93,9 @@ If a problem is in another file, you must use that file's repo-relative path and
 If you cannot name the exact other file and line, omit the finding.
 For findings in the file under review, use exactly: line=<num>: <issue and proposed solution>.
 For findings in other files, use exactly: file=<repo-relative-path> line=<num>: <issue and proposed solution>.
+For `line=<num>`, use the exact source line number shown in the numbered current-buffer listing.
+Do not count lines from the prompt, headings, diff headers, or repository context blocks.
+Choose the smallest relevant line that demonstrates the issue; do not default to the start of a function or block unless that line is itself faulty.
 Do not use plain `line=` for issues that belong to another file.
 Do not report repository-level or architectural concerns without anchoring them to a specific file and line.
 Each finding must stay on a single line.

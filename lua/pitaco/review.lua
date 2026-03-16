@@ -20,6 +20,18 @@ local function trim_text(value)
 	return vim.trim(value)
 end
 
+local function build_numbered_buffer_section(file_chunk)
+	return table.concat({
+		"Current buffer contents:",
+		"The numeric prefix on each line is the real source line number in the file.",
+		"Use only those prefixed numbers for `line=<num>` findings.",
+		"Do not count lines from the prompt itself.",
+		"```text",
+		file_chunk,
+		"```",
+	}, "\n")
+end
+
 local function build_project_summary(summary)
 	if type(summary) ~= "table" then
 		return "Project summary unavailable."
@@ -60,6 +72,8 @@ local function build_prompt_header(review_mode)
 			"You may report issues in the file under review or in other repository files when the context reveals a concrete problem.",
 			"If an issue belongs to another file, you must emit `file=<repo-relative-path> line=<num>:`. Never map that issue onto the current file.",
 			"If you cannot anchor a cross-file issue to a specific file and line, omit it.",
+			"For issues in the current file, use the exact source line number shown in the prefixed buffer listing below.",
+			"Choose the most specific relevant line. Do not default to the function declaration unless the declaration itself is the problem.",
 			"Focus on high-confidence problems that can cause bugs, regressions, missing edge cases, contract mismatches, broken UX flows, or materially harmful performance behavior.",
 			"Avoid nitpicks, naming/style preferences, comment requests, and generic refactor suggestions unless they point to a concrete defect risk.",
 			"If there are no meaningful issues, return no findings.",
@@ -72,6 +86,7 @@ local function build_prompt_header(review_mode)
 		"Every finding in diff mode must be anchored to the actual changed file using `file=<repo-relative-path> line=<num>:`.",
 		"Do not use plain `line=` in diff mode.",
 		"If you cannot anchor an issue to a specific changed file and line, omit it.",
+		"When referring to the current buffer, use the exact source line number shown in the prefixed buffer listing below.",
 		"Use the current buffer contents and repository context only to understand the branch diff; findings should stay grounded in the actual changes under review.",
 		"Avoid nitpicks, naming/style preferences, comment requests, and generic refactor suggestions unless they point to a concrete defect risk.",
 		"If there are no meaningful issues, return no findings.",
@@ -97,8 +112,7 @@ local function build_user_prompt(review_context, file_chunk, review_mode)
 		table.insert(sections, ("File under review: %s"):format(review_context.relative_path or utils.get_buf_name(0)))
 	end
 
-	table.insert(sections, "Current buffer contents:")
-	table.insert(sections, file_chunk)
+	table.insert(sections, build_numbered_buffer_section(file_chunk))
 
 	if review_mode == "diff" then
 		table.insert(sections, "")
