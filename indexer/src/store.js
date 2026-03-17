@@ -38,6 +38,55 @@ export function saveStore(root, store) {
   writeJson(paths.summaryPath, store.summary);
 }
 
+export function buildFileOutline(store, relativePath, changedLines = []) {
+  const file = store.manifest.files[relativePath];
+  if (!file) {
+    return null;
+  }
+
+  const rangeList = Array.isArray(changedLines) ? changedLines : [];
+  const hasChangedLines = rangeList.length > 0;
+  const chunkIds = new Set(file.chunkIds || []);
+  const symbols = [];
+
+  for (const chunk of store.chunks) {
+    if (!chunkIds.has(chunk.id)) {
+      continue;
+    }
+
+    const intersectsChangedLines = !hasChangedLines || rangeList.some((range) => {
+      const startLine = Number(range.startLine) || 0;
+      const endLine = Number(range.endLine) || startLine;
+      return chunk.startLine <= endLine && chunk.endLine >= startLine;
+    });
+    if (!intersectsChangedLines) {
+      continue;
+    }
+
+    symbols.push({
+      kind: chunk.kind,
+      symbol: chunk.symbol,
+      startLine: chunk.startLine,
+      endLine: chunk.endLine,
+    });
+  }
+
+  symbols.sort((left, right) => {
+    if (left.startLine !== right.startLine) {
+      return left.startLine - right.startLine;
+    }
+    return left.endLine - right.endLine;
+  });
+
+  return {
+    file: relativePath,
+    language: file.language,
+    imports: file.imports || [],
+    exports: file.exports || [],
+    symbols,
+  };
+}
+
 export function buildSummary(root, manifest, chunks) {
   const languages = {};
   const symbols = {};

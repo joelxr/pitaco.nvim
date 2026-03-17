@@ -469,10 +469,11 @@ local function apply_selection(choice, scope)
 		vim.g.pitaco_provider = choice.provider
 		vim.g.pitaco_model_id = choice.model_id
 	else
-		vim.g.pitaco_features = vim.g.pitaco_features or {}
-		vim.g.pitaco_features[normalized_scope] = vim.g.pitaco_features[normalized_scope] or {}
-		vim.g.pitaco_features[normalized_scope].provider = choice.provider
-		vim.g.pitaco_features[normalized_scope].model_id = choice.model_id
+		local features = vim.deepcopy(vim.g.pitaco_features or {})
+		features[normalized_scope] = features[normalized_scope] or {}
+		features[normalized_scope].provider = choice.provider
+		features[normalized_scope].model_id = choice.model_id
+		vim.g.pitaco_features = features
 	end
 
 	if vim.g.pitaco_persist_model_selection ~= false then

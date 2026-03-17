@@ -3,6 +3,7 @@ local config = require("pitaco.config")
 local log = require("pitaco.log")
 
 local M = {}
+local MAX_OUTLINE_FILES = 8
 
 local function join_lines(lines)
 	if type(lines) ~= "table" or vim.tbl_isempty(lines) then
@@ -273,6 +274,82 @@ function M.get_branch_git_diff(root, base_branch)
 	return join_lines(branch_diff), nil
 end
 
+local function parse_hunk_start(value)
+	local start_line = tonumber((value or ""):match("^(%d+)")) or 0
+	local line_count = tonumber((value or ""):match(",(%d+)$")) or 1
+	if line_count < 0 then
+		line_count = 0
+	end
+
+	return start_line, line_count
+end
+
+local function push_changed_range(file_map, current_file, start_line, line_count)
+	if current_file == nil or current_file == "" or start_line <= 0 then
+		return
+	end
+
+	local entry = file_map[current_file]
+	if entry == nil then
+		entry = {
+			file = current_file,
+			changedLines = {},
+		}
+		file_map[current_file] = entry
+	end
+
+	table.insert(entry.changedLines, {
+		startLine = start_line,
+		endLine = start_line + math.max(line_count - 1, 0),
+	})
+end
+
+local function parse_changed_files(diff_text)
+	if type(diff_text) ~= "string" or diff_text == "" then
+		return {}
+	end
+
+	local files_by_path = {}
+	local current_file = nil
+
+	for _, line in ipairs(vim.split(diff_text, "\n", { plain = true })) do
+		local next_file = line:match("^%+%+%+ b/(.+)$")
+		if next_file ~= nil then
+			if next_file == "/dev/null" then
+				current_file = nil
+			else
+				current_file = next_file
+				if files_by_path[current_file] == nil then
+					files_by_path[current_file] = {
+						file = current_file,
+						changedLines = {},
+					}
+				end
+			end
+		else
+			local new_hunk = line:match("^@@ %-%d+[,]?%d* %+(%d+[,]?%d*) @@")
+			if new_hunk ~= nil then
+				local start_line, line_count = parse_hunk_start(new_hunk)
+				push_changed_range(files_by_path, current_file, start_line, line_count)
+			end
+		end
+	end
+
+	local files = vim.tbl_values(files_by_path)
+	table.sort(files, function(left, right)
+		if #left.changedLines ~= #right.changedLines then
+			return #left.changedLines > #right.changedLines
+		end
+		return left.file < right.file
+	end)
+
+	if #files > MAX_OUTLINE_FILES then
+		files = vim.list_slice(files, 1, MAX_OUTLINE_FILES)
+	end
+
+	return files
+end
+
 function M.search(root, relative_path, limit)
 	local result, error_message = run_cli({
 		"search",
@@ -296,6 +373,38 @@ function M.search(root, relative_path, limit)
 	local ok, decoded = pcall(vim.json.decode, payload)
 	if not ok then
 		return nil, "Failed to decode Pitaco context search JSON"
+	end
+
+	return decoded, nil
+end
+
+function M.outline(root, changed_files)
+	if type(changed_files) ~= "table" or vim.tbl_isempty(changed_files) then
+		return { files = {} }, nil
+	end
+
+	local files_json = vim.json.encode(changed_files)
+	local result, error_message = run_cli({
+		"outline",
+		"--root",
+		root,
+		"--files-json",
+		files_json,
+		"--json",
+	}, root, config.get_context_timeout_ms())
+
+	if error_message ~= nil then
+		return nil, error_message
+	end
+
+	local payload = join_lines(result)
+	if payload == "" then
+		return nil, "Pitaco context outline returned an empty response"
+	end
+
+	local ok, decoded = pcall(vim.json.decode, payload)
+	if not ok then
+		return nil, "Failed to decode Pitaco context outline JSON"
 	end
 
 	return decoded, nil
@@ -336,6 +445,8 @@ function M.collect_review_context(bufnr, review_mode)
 	local git_diff = ""
 	local base_branch = M.find_base_branch(root)
 	local diff_error = nil
+	local changed_outline = nil
+	local outline_error = nil
 	if review_mode == "diff" then
 		git_diff, diff_error = M.get_branch_git_diff(root, base_branch)
 	elseif config.should_include_git_diff() then
@@ -344,6 +455,18 @@ function M.collect_review_context(bufnr, review_mode)
 
 	if diff_error ~= nil then
 		log.debug("context diff failed: " .. diff_error)
+	end
+
+	if review_mode == "diff" and git_diff ~= "" then
+		local changed_files = parse_changed_files(git_diff)
+		if not vim.tbl_isempty(changed_files) then
+			changed_outline, outline_error = M.outline(root, changed_files)
+			if outline_error ~= nil then
+				log.debug("context outline failed: " .. outline_error)
+			else
+				log.debug_table("context outline files", changed_outline, 800)
+			end
+		end
 	end
 
 	return {
@@ -355,7 +478,9 @@ function M.collect_review_context(bufnr, review_mode)
 		search_engine = search_result and search_result.engine or nil,
 		base_branch = base_branch,
 		git_diff = git_diff,
+		changed_outline = changed_outline and changed_outline.files or {},
 		diff_error = diff_error,
+		outline_error = outline_error,
 		search_error = search_error,
 	}
 end

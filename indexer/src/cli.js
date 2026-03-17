@@ -3,6 +3,7 @@
 import path from "node:path";
 import { findRepositoryRoot } from "./config.js";
 import { indexRepository } from "./indexer.js";
+import { getRepositoryOutline } from "./outline.js";
 import { searchRepository } from "./search.js";
 
 function parseArgs(argv) {
@@ -10,6 +11,7 @@ function parseArgs(argv) {
   const options = {
     command,
     file: null,
+    filesJson: null,
     root: null,
     json: false,
     limit: 6,
@@ -22,6 +24,9 @@ function parseArgs(argv) {
       index += 1;
     } else if (token === "--json") {
       options.json = true;
+    } else if (token === "--files-json") {
+      options.filesJson = rest[index + 1];
+      index += 1;
     } else if (token === "--limit") {
       options.limit = Number(rest[index + 1] || "6");
       index += 1;
@@ -58,6 +63,12 @@ async function main() {
 
     const filePath = path.isAbsolute(args.file) ? args.file : path.join(root, args.file);
     print(await searchRepository(root, filePath, args.limit), args.json);
+    return;
+  }
+
+  if (args.command === "outline") {
+    const requestedFiles = args.filesJson ? JSON.parse(args.filesJson) : [];
+    print(getRepositoryOutline(root, requestedFiles), args.json);
     return;
   }
 
