@@ -6,6 +6,7 @@ local utils = require("pitaco.utils")
 local requests = require("pitaco.requests")
 local fewshot = require("pitaco.fewshot")
 local commit = require("pitaco.commit")
+local summary = require("pitaco.summary")
 local model_picker = require("pitaco.model_picker")
 local context_engine = require("pitaco.context_engine")
 local review_runtime = require("pitaco.review_runtime")
@@ -165,6 +166,10 @@ function M.models(scope)
 end
 
 function M.summary()
+	summary.run()
+end
+
+function M.info()
 	local lines = {
 		"Pitaco summary",
 		("debug: %s"):format(config.is_debug_enabled() and "enabled" or "disabled"),

@@ -10,6 +10,7 @@ local DEFAULT_MODELS = {
 local default_opts = {
 	model_id = nil,
 	ollama_url = "http://localhost:11434",
+	ollama_options = nil,
 	provider = "anthropic",
 	language = "english",
 	commit_keymap = nil,
@@ -66,6 +67,13 @@ local function extract_feature_overrides(opts)
 		ensure_scope("commit").model_id = opts.commit_model_id
 	end
 
+	if opts.summary_provider ~= nil then
+		ensure_scope("summary").provider = opts.summary_provider
+	end
+	if opts.summary_model_id ~= nil then
+		ensure_scope("summary").model_id = opts.summary_model_id
+	end
+
 	return features
 end
 
@@ -95,6 +103,7 @@ function M.setup(opts)
 	vim.g.pitaco_provider = opts.provider
 	vim.g.pitaco_model_id = opts.model_id
 	vim.g.pitaco_ollama_url = opts.ollama_url
+	vim.g.pitaco_ollama_options = type(opts.ollama_options) == "table" and vim.deepcopy(opts.ollama_options) or nil
 	vim.g.pitaco_language = opts.language
 	vim.g.pitaco_commit_keymap = opts.commit_keymap
 	vim.g.pitaco_commit_system_prompt = opts.commit_system_prompt

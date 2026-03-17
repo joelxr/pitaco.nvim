@@ -7,6 +7,12 @@ local DEFAULT_MODELS = {
 	ollama = "llama3.1",
 }
 
+local BUILTIN_FEATURE_SCOPES = {
+	review = true,
+	commit = true,
+	summary = true,
+}
+
 local function normalize_scope(scope)
 	if type(scope) ~= "string" or scope == "" then
 		return nil
@@ -117,8 +123,34 @@ Rules:
 - Use imperative mood.
 - Keep it between 50 and 72 characters.
 - No trailing period.
-  ]]
+ ]]
 	return vim.g.pitaco_commit_system_prompt or default_commit_system_prompt
+end
+
+function M.get_summary_system_prompt()
+	local default_summary_system_prompt = [[
+You are generating a pull request summary from repository-aware context.
+You will receive repository context, relevant project code chunks, the current buffer contents, and the full branch diff against the repository base branch.
+
+Your job is to summarize the intended branch changes for a PR description.
+
+Rules:
+- Return only markdown.
+- This is not a review. Do not critique the code, suggest improvements, ask questions, or provide example code.
+- Do not say context is missing, avoid uncertainty disclaimers, and do not mention what else should be improved.
+- Do not include preambles, conclusions, notes, questions, or fenced code blocks.
+- Use exactly these top-level sections in this order:
+  ## What changed
+  ## Why
+  ## Risk/Impact
+- Under each section, use concise bullet points.
+- Be concrete and specific to the actual diff.
+- Focus on intended behavior and meaningful implementation details.
+- Mention user-visible, API, data, workflow, or operational impact when relevant.
+- If the reason for a change is not explicit, infer cautiously from the diff and context.
+- Keep the summary concise but useful for a GitHub PR description.
+  ]]
+	return vim.g.pitaco_summary_system_prompt or default_summary_system_prompt
 end
 
 function M.get_language()
@@ -175,6 +207,14 @@ function M.get_commit_additional_instruction()
 	return ""
 end
 
+function M.get_summary_additional_instruction()
+	local overrides = get_feature_overrides("summary")
+	if overrides ~= nil and non_empty_string(overrides.additional_instruction) then
+		return overrides.additional_instruction
+	end
+	return ""
+end
+
 function M.get_feature_overrides(scope)
 	local overrides = get_feature_overrides(scope)
 	if overrides == nil then
@@ -185,14 +225,26 @@ end
 
 function M.list_feature_scopes()
 	local features = vim.g.pitaco_features
-	if type(features) ~= "table" then
-		return {}
+
+	local seen = {}
+	local scopes = {}
+
+	for scope in pairs(BUILTIN_FEATURE_SCOPES) do
+		seen[scope] = true
+		table.insert(scopes, scope)
 	end
 
-	local scopes = {}
+	if type(features) ~= "table" then
+		table.sort(scopes)
+		return scopes
+	end
+
 	for scope, overrides in pairs(features) do
 		if type(scope) == "string" and scope ~= "" and type(overrides) == "table" then
-			table.insert(scopes, scope)
+			if not seen[scope] then
+				seen[scope] = true
+				table.insert(scopes, scope)
+			end
 		end
 	end
 
@@ -206,6 +258,16 @@ function M.get_provider(scope)
 		return overrides.provider
 	end
 	return vim.g.pitaco_provider
+end
+
+function M.get_ollama_options(scope)
+	local base = type(vim.g.pitaco_ollama_options) == "table" and vim.deepcopy(vim.g.pitaco_ollama_options) or {}
+	local overrides = get_feature_overrides(scope)
+	if overrides ~= nil and type(overrides.ollama_options) == "table" then
+		base = vim.tbl_deep_extend("force", base, overrides.ollama_options)
+	end
+
+	return next(base) ~= nil and base or nil
 end
 
 function M.is_debug_enabled()

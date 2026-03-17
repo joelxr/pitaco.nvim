@@ -1,122 +1,9 @@
 local config = require("pitaco.config")
 local context_engine = require("pitaco.context_engine")
+local prompt_context = require("pitaco.prompt_context")
 local utils = require("pitaco.utils")
 
 local M = {}
-
-local function format_list(items)
-	if type(items) ~= "table" or vim.tbl_isempty(items) then
-		return "none"
-	end
-
-	return table.concat(items, ", ")
-end
-
-local function trim_text(value)
-	if type(value) ~= "string" then
-		return ""
-	end
-
-	return vim.trim(value)
-end
-
-local function build_numbered_buffer_section(file_chunk)
-	return table.concat({
-		"Current buffer contents:",
-		"The numeric prefix on each line is the real source line number in the file.",
-		"Use only those prefixed numbers for `line=<num>` findings.",
-		"Do not count lines from the prompt itself.",
-		"```text",
-		file_chunk,
-		"```",
-	}, "\n")
-end
-
-local function build_project_summary(summary)
-	if type(summary) ~= "table" then
-		return "Project summary unavailable."
-	end
-
-	return table.concat({
-		("Repository: %s"):format(summary.repository_name or "unknown"),
-		("Indexed files: %s"):format(summary.file_count or 0),
-		("Indexed chunks: %s"):format(summary.chunk_count or 0),
-		("Languages: %s"):format(format_list(summary.languages)),
-		("Top symbols: %s"):format(format_list(summary.top_symbols)),
-	}, "\n")
-end
-
-local function build_relevant_chunks(chunks)
-	if type(chunks) ~= "table" or vim.tbl_isempty(chunks) then
-		return "No related code chunks were retrieved."
-	end
-
-	local sections = {}
-	for _, chunk in ipairs(chunks) do
-		table.insert(sections, ("--- %s (%s, score=%.3f) ---\n%s"):format(
-			chunk.file or "unknown",
-			chunk.symbol or chunk.kind or "chunk",
-			tonumber(chunk.score) or 0,
-			chunk.code or ""
-		))
-	end
-
-	return table.concat(sections, "\n\n")
-end
-
-local function format_line_ranges(ranges)
-	if type(ranges) ~= "table" or vim.tbl_isempty(ranges) then
-		return "unknown"
-	end
-
-	local parts = {}
-	for _, range in ipairs(ranges) do
-		local start_line = tonumber(range.startLine) or 0
-		local end_line = tonumber(range.endLine) or start_line
-		if start_line > 0 then
-			if end_line > start_line then
-				table.insert(parts, ("%d-%d"):format(start_line, end_line))
-			else
-				table.insert(parts, tostring(start_line))
-			end
-		end
-	end
-
-	return #parts > 0 and table.concat(parts, ", ") or "unknown"
-end
-
-local function build_changed_outline(outline_files)
-	if type(outline_files) ~= "table" or vim.tbl_isempty(outline_files) then
-		return "No compact syntax outline was retrieved for the changed files."
-	end
-
-	local sections = {}
-	for _, entry in ipairs(outline_files) do
-		local symbols = {}
-		for index, symbol in ipairs(entry.symbols or {}) do
-			if index > 8 then
-				break
-			end
-			table.insert(symbols, ("%s %s (%d-%d)"):format(
-				symbol.kind or "symbol",
-				symbol.symbol or "unknown",
-				tonumber(symbol.startLine) or 0,
-				tonumber(symbol.endLine) or 0
-			))
-		end
-
-		table.insert(sections, table.concat({
-			("File: %s"):format(entry.file or "unknown"),
-			("Language: %s"):format(entry.language or "unknown"),
-			("Changed lines: %s"):format(format_line_ranges(entry.changedLines)),
-			("Imports: %s"):format(format_list(entry.imports)),
-			("Exports: %s"):format(format_list(entry.exports)),
-			("Changed symbols: %s"):format(#symbols > 0 and table.concat(symbols, "; ") or "none"),
-		}, "\n"))
-	end
-
-	return table.concat(sections, "\n\n")
-end
 
 local function build_prompt_header(review_mode)
 	if review_mode == "file" then
@@ -153,10 +40,10 @@ local function build_user_prompt(review_context, file_chunk, review_mode)
 		table.concat(build_prompt_header(review_mode), "\n"),
 		"",
 		"Project summary:",
-		build_project_summary(review_context.project_summary),
+		prompt_context.build_project_summary(review_context.project_summary),
 		"",
 		"Relevant project code:",
-		build_relevant_chunks(review_context.relevant_chunks),
+		prompt_context.build_relevant_chunks(review_context.relevant_chunks),
 		"",
 		("Current buffer: %s"):format(review_context.relative_path or utils.get_buf_name(0)),
 		("Review scope: %s"):format(review_scope),
@@ -166,19 +53,19 @@ local function build_user_prompt(review_context, file_chunk, review_mode)
 		table.insert(sections, ("File under review: %s"):format(review_context.relative_path or utils.get_buf_name(0)))
 	end
 
-	table.insert(sections, build_numbered_buffer_section(file_chunk))
+	table.insert(sections, prompt_context.build_numbered_buffer_section(file_chunk))
 
 	if review_mode == "diff" then
 		table.insert(sections, "")
 		table.insert(sections, ("Base branch: %s"):format(review_context.base_branch or "unknown"))
 		table.insert(sections, "Changed code structure:")
-		table.insert(sections, build_changed_outline(review_context.changed_outline))
+		table.insert(sections, prompt_context.build_changed_outline(review_context.changed_outline))
 		table.insert(sections, "")
 		table.insert(sections, "Branch diff:")
-		table.insert(sections, trim_text(review_context.git_diff))
+		table.insert(sections, prompt_context.trim_text(review_context.git_diff))
 	end
 
-	local additional_instruction = trim_text(config.get_review_additional_instruction())
+	local additional_instruction = prompt_context.trim_text(config.get_review_additional_instruction())
 	if additional_instruction ~= "" then
 		table.insert(sections, "")
 		table.insert(sections, "Additional instruction:")
@@ -200,7 +87,7 @@ function M.build_requests(provider, fewshot_messages, review_mode)
 	local lines = vim.api.nvim_buf_get_lines(buffer_number, 0, -1, false)
 	local mode = review_mode == "file" and "file" or "diff"
 	local review_context = context_engine.collect_review_context(buffer_number, mode)
-	local diff_text = trim_text(review_context.git_diff)
+	local diff_text = prompt_context.trim_text(review_context.git_diff)
 
 	if mode == "diff" and diff_text == "" then
 		vim.schedule(function()

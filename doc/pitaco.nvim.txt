@@ -29,6 +29,7 @@ FEATURES ✨              *pitaco.nvim-pitaco-neovim-plugin-🚀-features-✨*
 - **Persistent review history**: Completed reviews are stored on disk with repo/model/hash metadata and can be reopened later with `:Pitaco reviews`.
 - **Diagnostics workflow**: Publish findings through Neovim diagnostics, restore them when files are reopened, clear the active review with `:Pitaco clear`, hide the current line with `:Pitaco clearLine`, or insert a diagnostics summary comment with `:Pitaco comment`.
 - **AI-assisted commits**: Generate commit messages from current git changes with `:Pitaco commit`.
+- **PR summaries**: Generate a markdown PR summary from the current branch diff with `:Pitaco summary`, opened in a modal and copied to the clipboard.
 - **Runtime model switching**: Pick and persist provider/model selections with `:Pitaco models [scope]`.
 - **Session language override**: Inspect or override the active response language with `:Pitaco language [value]`.
 - **Built-in health checks**: Validate provider setup and dependencies with `:Pitaco health`.
@@ -86,8 +87,9 @@ Once installed, you can use the following commands to interact with Pitaco:
 - `:Pitaco reviews` - Open the stored review history for the current repository and reactivate a review.
 - `:Pitaco commit` - Generate a commit message from git changes and confirm the commit.
 - `:Pitaco health` - Run Pitaco checks with `:checkhealth pitaco`.
-- `:Pitaco models [default|scope]` - Open a model picker for the base config or a feature scope such as `review` or `commit`.
-- `:Pitaco summary` - Show the resolved runtime Pitaco summary, including active provider/model selections per scope.
+- `:Pitaco models [default|scope]` - Open a model picker for the base config or a feature scope such as `review`, `commit`, or `summary`.
+- `:Pitaco summary` - Generate a markdown PR summary for the current branch diff, open it in a modal, and copy it to the clipboard.
+- `:Pitaco info` / `:Pitaco settings` - Show the resolved runtime Pitaco configuration summary, including active provider/model selections per scope.
 - `:Pitaco debug [on|off|toggle]` - Show or change the plugin debug mode for the current Neovim session.
 - `:Pitaco language [value]` - Show current language, or override it for this Neovim session.
     - Use `:Pitaco language default` (or `reset`) to clear session override and return to setup value.
@@ -118,7 +120,8 @@ Exmaple:
   support for additional models is planned in the roadmap.
 For `ollama`, no API key is required. You may set: - `model_id` (default:
 `llama3.1` when `provider = "ollama"`) - `ollama_url` (default:
-`http://localhost:11434`)
+`http://localhost:11434`) - `ollama_options` (optional request options sent
+under `options`, such as `num_ctx`)
 
 You can configure Pitaco by adding the following to your Neovim configuration
 file:
@@ -128,6 +131,9 @@ file:
         provider = "anthropic", -- Base/default provider used when a feature does not override it
         model_id = "claude-haiku-4-5", -- Base/default model for the selected provider
         ollama_url = "http://localhost:11434",
+        ollama_options = {
+            num_ctx = 8192,
+        },
         language = "english",
         debug = false, -- Enable request/response debug logs via vim.notify
         commit_keymap = "<leader>at", -- Optional mapping for :Pitaco commit
@@ -148,6 +154,21 @@ Use the format: type(scope?): subject, scope is optional and multiple scopes are
 Types are: build, chore, ci, docs, feat, fix, perf, refactor, revert, style or test.
 ]],
             },
+            summary = {
+                provider = "openai",
+                model_id = "gpt-5-mini",
+                additional_instruction = [[
+Keep the summary concise and ready to paste into GitHub.
+]],
+            },
+            -- Feature scopes can override ollama request options too
+            -- summary = {
+            --     provider = "ollama",
+            --     model_id = "llama3.1",
+            --     ollama_options = {
+            --         num_ctx = 16384,
+            --     },
+            -- },
         },
         context_enabled = true,
         context_cli_cmd = "pitaco-indexer", -- Or { "node", "/absolute/path/to/indexer/src/cli.js" }
@@ -168,50 +189,70 @@ Neovim session with:
 `features.review.additional_instruction` is appended to review requests.
 `features.commit.additional_instruction` is appended to the commit-message
 prompt.
+`features.summary.additional_instruction` is appended to PR summary requests.
+`ollama_options` is merged into Ollama chat requests as the `options`
+payload. `features.<scope>.ollama_options` overrides or extends the base
+`ollama_options` for that scope.
 
 Provider/model selection resolves like this: - Base defaults come from
 `provider` and `model_id`. - Feature-specific overrides can be set under
-`features.<name>`. - Each feature may set `provider`, `model_id`, and
-`additional_instruction`. - If a feature changes `provider` without setting
-`model_id`, Pitaco falls back to that provider’s built-in default model. -
-`review` and `commit` already use scoped resolution, and future features can
-reuse the same mechanism.
+`features.<name>`. - Each feature may set `provider`, `model_id`,
+`additional_instruction`, and `ollama_options`. - If a feature changes
+`provider` without setting `model_id`, Pitaco falls back to that provider’s
+built-in default model. -
+Built-in scoped features include `review`, `commit`, and `summary`.
 
 Example with base defaults plus per-feature overrides:
 
 >lua
     require("pitaco").setup({
-        provider = "anthropic",
-        model_id = "claude-haiku-4-5",
+        provider = "ollama",
+        model_id = "llama3.1",
+        ollama_options = {
+            num_ctx = 8192,
+        },
         features = {
             review = {
-                provider = "anthropic",
-                model_id = "claude-haiku-4-5",
+                provider = "ollama",
+                model_id = "llama3.1",
                 additional_instruction = "Focus on correctness and user-visible regressions.",
+                ollama_options = {
+                    num_ctx = 16384,
+                },
             },
             commit = {
                 provider = "openai",
                 model_id = "gpt-5-mini",
                 additional_instruction = "Use Conventional Commits.",
             },
+            summary = {
+                provider = "openai",
+                model_id = "gpt-5-mini",
+                additional_instruction = "Keep it crisp and PR-ready.",
+            },
         },
     })
 <
 
+With the example above, review requests use `num_ctx = 16384` while other
+Ollama-backed scopes inherit `num_ctx = 8192`.
+
 Flat aliases such as `review_provider`, `review_model_id`, `commit_provider`,
-and `commit_model_id` are also accepted, but `features = { ... }` is the
-preferred format going forward.
+`commit_model_id`, `summary_provider`, and `summary_model_id` are also
+accepted, but `features = { ... }` is the preferred format going forward.
 
 `persist_model_selection` stores base and scoped provider/model selections in:
 - `stdpath("state") .. "/pitaco-model-state.json"`
 
 `:Pitaco models` changes the base/default provider and model. `:Pitaco models
-commit` or `:Pitaco models review` changes that feature’s scoped
-provider/model override and shows the current selection in the picker header.
-`:Pitaco summary` reports the resolved runtime provider/model for the default
-scope and every configured feature scope, so inherited and fallback models are
-visible. `:Pitaco debug on`, `:Pitaco debug off`, and `:Pitaco debug toggle`
-change the live debug flag without re-running `setup()`.
+commit`, `:Pitaco models review`, or `:Pitaco models summary` changes that
+feature’s scoped provider/model override and shows the current selection in
+the picker header. `:Pitaco summary` generates a PR summary from the current
+branch diff and copies the markdown to your clipboard. `:Pitaco info` reports
+the resolved runtime provider/model for the default scope and every feature
+scope, so inherited and fallback models are visible. `:Pitaco debug on`,
+`:Pitaco debug off`, and `:Pitaco debug toggle` change the live debug flag
+without re-running `setup()`.
 
 
 REPOSITORY-AWARE REVIEW ~

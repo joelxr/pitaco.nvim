@@ -12,6 +12,7 @@ function M.get_model(scope)
 end
 
 function M.build_chat_request(system_prompt, messages, max_tokens, scope)
+	local config = require("pitaco.config")
 	local model = M.get_model(scope)
 	local final_messages = {}
 
@@ -27,6 +28,11 @@ function M.build_chat_request(system_prompt, messages, max_tokens, scope)
 		model = model,
 		messages = final_messages,
 	}
+
+	local ollama_options = config.get_ollama_options(scope)
+	if type(ollama_options) == "table" then
+		request_table.options = ollama_options
+	end
 
 	if max_tokens ~= nil then
 		request_table.max_tokens = max_tokens

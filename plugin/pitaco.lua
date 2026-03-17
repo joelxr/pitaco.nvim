@@ -61,6 +61,8 @@ vim.api.nvim_create_user_command("Pitaco", function(opts)
 		commands.models(opts.fargs[2])
 	elseif action == "summary" then
 		commands.summary()
+	elseif action == "info" or action == "settings" then
+		commands.info()
 	elseif action == "debug" then
 		commands.debug(opts.fargs[2])
 	elseif action == "language" then
@@ -84,6 +86,8 @@ end, {
 			"commit",
 			"models",
 			"summary",
+			"info",
+			"settings",
 			"debug",
 			"language",
 		}
