@@ -100,8 +100,6 @@ require('pitaco').setup({
     model_id = "claude-haiku-4-5", -- Base/default model for the selected provider
     ollama_url = "http://localhost:11434",
     language = "english",
-    review_additional_instruction = nil,
-    commit_additional_instruction = nil,
     debug = false, -- Enable request/response debug logs via vim.notify
     commit_keymap = "<leader>at", -- Optional mapping for :Pitaco commit
     persist_model_selection = true, -- Save :Pitaco models [scope] selections in the state file
@@ -109,10 +107,17 @@ require('pitaco').setup({
         review = {
             provider = "openrouter",
             model_id = "openrouter/deepseek/deepseek-chat-v3-0324:free",
+            additional_instruction = [[
+Prioritize correctness, regressions, and user-visible breakage.
+]],
         },
         commit = {
             provider = "openai",
             model_id = "gpt-5-mini",
+            additional_instruction = [[
+Use the format: type(scope?): subject, scope is optional and multiple scopes are supported.
+Types are: build, chore, ci, docs, feat, fix, perf, refactor, revert, style or test.
+]],
         },
     },
     context_enabled = true,
@@ -130,14 +135,13 @@ You can temporarily override it during the current Neovim session with:
 :Pitaco language portuguese
 ```
 
-`review_additional_instruction` is appended to review requests.
-`commit_additional_instruction` is appended to the commit-message prompt.
-`additional_instruction` is still accepted as a backward-compatible alias for `review_additional_instruction`.
+`features.review.additional_instruction` is appended to review requests.
+`features.commit.additional_instruction` is appended to the commit-message prompt.
 
 Provider/model selection resolves like this:
 - Base defaults come from `provider` and `model_id`.
 - Feature-specific overrides can be set under `features.<name>`.
-- Each feature may set `provider` and `model_id`.
+- Each feature may set `provider`, `model_id`, and `additional_instruction`.
 - If a feature changes `provider` without setting `model_id`, Pitaco falls back to that provider's built-in default model.
 - `review` and `commit` already use scoped resolution, and future features can reuse the same mechanism.
 
@@ -151,10 +155,12 @@ require("pitaco").setup({
         review = {
             provider = "anthropic",
             model_id = "claude-haiku-4-5",
+            additional_instruction = "Focus on correctness and user-visible regressions.",
         },
         commit = {
             provider = "openai",
             model_id = "gpt-5-mini",
+            additional_instruction = "Use Conventional Commits.",
         },
     },
 })

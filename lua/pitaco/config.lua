@@ -156,19 +156,23 @@ function M.clear_session_language()
 end
 
 function M.get_additional_instruction()
-	return vim.g.pitaco_additional_instruction or ""
+	return ""
 end
 
 function M.get_review_additional_instruction()
-	local instruction = vim.g.pitaco_review_additional_instruction
-	if instruction == nil or instruction == "" then
-		return M.get_additional_instruction()
+	local overrides = get_feature_overrides("review")
+	if overrides ~= nil and non_empty_string(overrides.additional_instruction) then
+		return overrides.additional_instruction
 	end
-	return instruction
+	return ""
 end
 
 function M.get_commit_additional_instruction()
-	return vim.g.pitaco_commit_additional_instruction or ""
+	local overrides = get_feature_overrides("commit")
+	if overrides ~= nil and non_empty_string(overrides.additional_instruction) then
+		return overrides.additional_instruction
+	end
+	return ""
 end
 
 function M.get_feature_overrides(scope)
