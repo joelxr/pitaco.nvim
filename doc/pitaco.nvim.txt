@@ -143,23 +143,23 @@ file:
                 provider = "openrouter",
                 model_id = "openrouter/deepseek/deepseek-chat-v3-0324:free",
                 additional_instruction = [[
-Prioritize correctness, regressions, and user-visible breakage.
-]],
+    Prioritize correctness, regressions, and user-visible breakage.
+    ]],
             },
             commit = {
                 provider = "openai",
                 model_id = "gpt-5-mini",
                 additional_instruction = [[
-Use the format: type(scope?): subject, scope is optional and multiple scopes are supported.
-Types are: build, chore, ci, docs, feat, fix, perf, refactor, revert, style or test.
-]],
+    Use the format: type(scope?): subject, scope is optional and multiple scopes are supported.
+    Types are: build, chore, ci, docs, feat, fix, perf, refactor, revert, style or test.
+    ]],
             },
             summary = {
                 provider = "openai",
                 model_id = "gpt-5-mini",
                 additional_instruction = [[
-Keep the summary concise and ready to paste into GitHub.
-]],
+    Keep the summary concise and ready to paste into GitHub.
+    ]],
             },
             -- Feature scopes can override ollama request options too
             -- summary = {
@@ -188,9 +188,8 @@ Neovim session with:
 
 `features.review.additional_instruction` is appended to review requests.
 `features.commit.additional_instruction` is appended to the commit-message
-prompt.
-`features.summary.additional_instruction` is appended to PR summary requests.
-`ollama_options` is merged into Ollama chat requests as the `options`
+prompt. `features.summary.additional_instruction` is appended to PR summary
+requests. `ollama_options` is merged into Ollama chat requests as the `options`
 payload. `features.<scope>.ollama_options` overrides or extends the base
 `ollama_options` for that scope.
 
@@ -199,8 +198,8 @@ Provider/model selection resolves like this: - Base defaults come from
 `features.<name>`. - Each feature may set `provider`, `model_id`,
 `additional_instruction`, and `ollama_options`. - If a feature changes
 `provider` without setting `model_id`, Pitaco falls back to that provider’s
-built-in default model. -
-Built-in scoped features include `review`, `commit`, and `summary`.
+built-in default model. - Built-in scoped features include `review`, `commit`,
+and `summary`.
 
 Example with base defaults plus per-feature overrides:
 
