@@ -70,6 +70,10 @@ function M.persist_selection(provider, model_id)
 	local state = M.load()
 	state.provider = provider
 	state.model_id = model_id
+	state.models = state.models or {}
+	if type(provider) == "string" and provider ~= "" and type(model_id) == "string" and model_id ~= "" then
+		state.models[provider] = model_id
+	end
 	state.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
 	return M.save(state)
 end
@@ -84,6 +88,22 @@ function M.persist_feature_selection(scope, provider, model_id)
 	state.features[scope] = state.features[scope] or {}
 	state.features[scope].provider = provider
 	state.features[scope].model_id = model_id
+	state.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+	return M.save(state)
+end
+
+function M.clear_feature_selection(scope)
+	if type(scope) ~= "string" or scope == "" then
+		return false, "invalid scope"
+	end
+
+	local state = M.load()
+	if type(state.features) == "table" then
+		state.features[scope] = nil
+		if next(state.features) == nil then
+			state.features = nil
+		end
+	end
 	state.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
 	return M.save(state)
 end

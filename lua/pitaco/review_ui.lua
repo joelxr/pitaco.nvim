@@ -55,7 +55,7 @@ local function relative_time(iso_timestamp)
 		return iso_timestamp
 	end
 
-	local timestamp = os.time({
+	local local_timestamp = os.time({
 		year = tonumber(year),
 		month = tonumber(month),
 		day = tonumber(day),
@@ -63,11 +63,17 @@ local function relative_time(iso_timestamp)
 		min = tonumber(minute),
 		sec = tonumber(second),
 	})
-	if timestamp == nil then
+	if local_timestamp == nil then
 		return iso_timestamp
 	end
 
-	local diff = math.max(os.difftime(os.time(), timestamp), 0)
+	local timezone_offset = os.difftime(
+		os.time(os.date("!*t", local_timestamp)),
+		os.time(os.date("*t", local_timestamp))
+	)
+	local timestamp = local_timestamp - timezone_offset
+
+	local diff = math.max(vim.fn.localtime() - timestamp, 0)
 	if diff < 60 then
 		return "just now"
 	end
@@ -83,7 +89,7 @@ local function relative_time(iso_timestamp)
 	if diff < 2592000 then
 		return ("%dw ago"):format(math.floor(diff / 604800))
 	end
-	return ("%s-%s-%s"):format(year, month, day)
+	return os.date("%Y-%m-%d", timestamp)
 end
 
 local function short_hash(value)

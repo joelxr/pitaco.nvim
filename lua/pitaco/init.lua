@@ -82,6 +82,11 @@ function M.setup(opts)
 		end
 		if type(state.model_id) == "string" and state.model_id ~= "" then
 			opts.model_id = state.model_id
+		elseif type(state.models) == "table" and type(opts.provider) == "string" and opts.provider ~= "" then
+			local legacy_model_id = state.models[opts.provider]
+			if type(legacy_model_id) == "string" and legacy_model_id ~= "" then
+				opts.model_id = legacy_model_id
+			end
 		end
 		feature_overrides = merge_persisted_feature_overrides(feature_overrides, state.features)
 	end

@@ -337,6 +337,23 @@ local function build_entries(scope)
 	local entries = {}
 	local _, selected_provider, selected_model = current_selection(scope)
 
+	if scope ~= nil then
+		table.insert(entries, {
+			provider = nil,
+			model_id = nil,
+			display_model = "inherit-default",
+			ready = true,
+			status = "inherit",
+			plan = "inherit",
+			cost = "n/a",
+			balance = "n/a",
+			selected = false,
+			line = "inherit default | use the current default provider/model for this scope",
+			search_text = "inherit default follow global default",
+			inherit_default = true,
+		})
+	end
+
 	local openrouter_balance = fetch_openrouter_credits()
 	local openai_balance = fetch_openai_credits()
 	local openrouter_costs = fetch_openrouter_costs()
@@ -409,13 +426,20 @@ local function build_entries(scope)
 	end
 
 	table.sort(entries, function(a, b)
+		if a.inherit_default ~= b.inherit_default then
+			return a.inherit_default == true
+		end
 		if a.ready ~= b.ready then
 			return a.ready
 		end
-		if a.provider ~= b.provider then
-			return a.provider < b.provider
+		local a_provider = a.provider or ""
+		local b_provider = b.provider or ""
+		if a_provider ~= b_provider then
+			return a_provider < b_provider
 		end
-		return a.model_id < b.model_id
+		local a_model = a.model_id or ""
+		local b_model = b.model_id or ""
+		return a_model < b_model
 	end)
 
 	return entries
@@ -465,6 +489,31 @@ local function apply_selection(choice, scope)
 	end
 
 	local normalized_scope = normalize_scope(scope)
+	if normalized_scope ~= nil and choice.inherit_default then
+		local features = vim.deepcopy(vim.g.pitaco_features or {})
+		features[normalized_scope] = nil
+		vim.g.pitaco_features = features
+
+		if vim.g.pitaco_persist_model_selection ~= false then
+			local ok, err = model_state.clear_feature_selection(normalized_scope)
+			if not ok then
+				vim.notify("Pitaco models: failed to clear scoped override: " .. tostring(err), vim.log.levels.WARN)
+			end
+		end
+
+		local provider = config.get_provider(normalized_scope)
+		local model_id = provider and config.get_model(provider, normalized_scope) or "unknown"
+		vim.notify(
+			("Pitaco active model for %s now inherits default: %s (%s)"):format(
+				scope_label(scope),
+				model_id,
+				provider or "unknown"
+			),
+			vim.log.levels.INFO
+		)
+		return
+	end
+
 	if normalized_scope == nil then
 		vim.g.pitaco_provider = choice.provider
 		vim.g.pitaco_model_id = choice.model_id

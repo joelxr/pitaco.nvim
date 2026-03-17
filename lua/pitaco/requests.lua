@@ -7,6 +7,12 @@ local review_store = require("pitaco.review_store")
 
 local M = {}
 
+local function progress_message(metadata)
+	local provider = metadata.provider or "unknown"
+	local model_id = metadata.model_id or "unknown"
+	return ("Reviewing with %s/%s"):format(provider, model_id)
+end
+
 local function project_immediate_diagnostics(namespace, diagnostics, repo_root)
 	local grouped = {}
 
@@ -115,7 +121,7 @@ function M.make_requests(namespace, provider, request_bundle)
 		)
 		log.preview_json("analysis request payload", request_json)
 
-		progress.update("Processing review", request_index, starting_request_count)
+		progress.update(progress_message(metadata), request_index, starting_request_count)
 
 		provider.request(request_json, function(response, error_message)
 			if error_message ~= nil then
