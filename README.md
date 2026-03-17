@@ -6,7 +6,8 @@ Welcome to the **Pitaco** Neovim plugin! This is an experimental plugin designed
 
 - **Repository-aware reviews**: Review the current branch diff or the entire current file with `:Pitaco`, `:Pitaco review`, `:Pitaco diff`, `:Pitaco file`, or `:PitacoReview`.
 - **Local codebase indexing**: Build and refresh semantic repository context with `:Pitaco index` or `:PitacoIndex`.
-- **Diagnostics workflow**: Publish findings through Neovim diagnostics, clear all findings with `:Pitaco clear`, clear the current line with `:Pitaco clearLine`, or insert a diagnostics summary comment with `:Pitaco comment`.
+- **Persistent review history**: Completed reviews are stored on disk with repo/model/hash metadata and can be reopened later with `:Pitaco reviews`.
+- **Diagnostics workflow**: Publish findings through Neovim diagnostics, restore them when files are reopened, clear the active review with `:Pitaco clear`, hide the current line with `:Pitaco clearLine`, or insert a diagnostics summary comment with `:Pitaco comment`.
 - **AI-assisted commits**: Generate commit messages from current git changes with `:Pitaco commit`.
 - **Runtime model switching**: Pick and persist provider/model selections with `:Pitaco models [scope]`.
 - **Session language override**: Inspect or override the active response language with `:Pitaco language [value]`.
@@ -58,6 +59,7 @@ Once installed, you can use the following commands to interact with Pitaco:
 - `:Pitaco clear` - Clear the current review.
 - `:Pitaco clearLine` - Clear the current review for the current line.
 - `:Pitaco comment` - Add a comment under the current line with the Pitaco diagnostics summary.
+- `:Pitaco reviews` - Open the stored review history for the current repository and reactivate a review.
 - `:Pitaco commit` - Generate a commit message from git changes and confirm the commit.
 - `:Pitaco health` - Run Pitaco checks with `:checkhealth pitaco`.
 - `:Pitaco models [default|scope]` - Open a model picker for the base config or a feature scope such as `review` or `commit`.
@@ -173,6 +175,9 @@ Flat aliases such as `review_provider`, `review_model_id`, `commit_provider`, an
 Pitaco can enrich review prompts with relevant repository context retrieved from a local index.
 Reviews are sent as a single repository-aware request, not split into smaller chunks.
 Both review modes publish findings through Neovim's diagnostics API.
+Completed reviews are also persisted under `stdpath("state")`, including provider/model metadata, commit hashes, and findings.
+When a file is reopened, Pitaco restores diagnostics for the active stored review and attempts to relocate findings using nearby source context.
+If relocation fails, the finding is rendered on line `1` with a stale marker.
 Diff mode compares the current branch state against the local `main` branch when available, otherwise `master`.
 
 Review flow:

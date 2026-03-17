@@ -53,6 +53,8 @@ vim.api.nvim_create_user_command("Pitaco", function(opts)
 		commands.index()
 	elseif action == "comment" then
 		commands.comment()
+	elseif action == "reviews" then
+		commands.reviews()
 	elseif action == "commit" then
 		commands.commit()
 	elseif action == "models" then
@@ -78,6 +80,7 @@ end, {
 			"clearLine",
 			"health",
 			"comment",
+			"reviews",
 			"commit",
 			"models",
 			"summary",

@@ -196,6 +196,7 @@ end
 
 function M.build_requests(provider, fewshot_messages, review_mode)
 	local buffer_number = utils.get_buffer_number()
+	local buffer_path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buffer_number), ":p")
 	local lines = vim.api.nvim_buf_get_lines(buffer_number, 0, -1, false)
 	local mode = review_mode == "file" and "file" or "diff"
 	local review_context = context_engine.collect_review_context(buffer_number, mode)
@@ -218,7 +219,33 @@ function M.build_requests(provider, fewshot_messages, review_mode)
 		content = build_user_prompt(review_context, file_chunk, mode),
 	})
 
-	return { provider.build_chat_request(config.get_system_prompt(), messages, 2048) }, 1, #lines
+	local content_source = mode == "diff" and diff_text or table.concat(lines, "\n")
+	local repo_root = review_context.root
+	local relative_path = review_context.relative_path or utils.get_buf_name(buffer_number)
+
+	return {
+		requests = { provider.build_chat_request(config.get_system_prompt(), messages, 2048) },
+		request_count = 1,
+		line_count = #lines,
+		metadata = {
+			id_seed = vim.fn.sha256(table.concat({
+				repo_root or "",
+				relative_path or "",
+				mode,
+				content_source,
+			}, "|")),
+			repo_root = repo_root,
+			buffer_path = buffer_path,
+			relative_path = relative_path,
+			mode = mode,
+			provider = provider.name,
+			model_id = provider.get_model and provider.get_model() or nil,
+			base_branch = review_context.base_branch,
+			merge_base = context_engine.get_merge_base(repo_root, review_context.base_branch),
+			head = context_engine.get_head_commit(repo_root),
+			content_hash = vim.fn.sha256(content_source or ""),
+		},
+	}
 end
 
 return M

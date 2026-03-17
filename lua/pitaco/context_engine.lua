@@ -215,6 +215,34 @@ local function resolve_merge_base(root, base_branch)
 	return resolved
 end
 
+function M.get_merge_base(root, base_branch)
+	return resolve_merge_base(root, base_branch)
+end
+
+function M.get_head_commit(root)
+	if root == nil or root == "" then
+		return nil
+	end
+
+	local head_lines, head_error = run_job(
+		"git",
+		{ "-C", root, "rev-parse", "HEAD" },
+		root,
+		config.get_context_timeout_ms()
+	)
+	if head_error ~= nil then
+		log.debug("git rev-parse HEAD failed: " .. head_error)
+		return nil
+	end
+
+	local resolved = join_lines(head_lines)
+	if resolved == "" then
+		return nil
+	end
+
+	return resolved
+end
+
 function M.get_file_git_diff(root, relative_path)
 	if root == nil or root == "" or relative_path == nil or relative_path == "" then
 		return ""

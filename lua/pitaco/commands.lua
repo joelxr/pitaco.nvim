@@ -8,7 +8,11 @@ local fewshot = require("pitaco.fewshot")
 local commit = require("pitaco.commit")
 local model_picker = require("pitaco.model_picker")
 local context_engine = require("pitaco.context_engine")
-local namespace = vim.api.nvim_create_namespace("pitaco")
+local review_runtime = require("pitaco.review_runtime")
+local review_store = require("pitaco.review_store")
+local review_renderer = require("pitaco.review_renderer")
+local review_ui = require("pitaco.review_ui")
+local namespace = review_runtime.get_namespace()
 
 local function normalize_scope(scope)
 	if type(scope) ~= "string" then
@@ -53,8 +57,8 @@ function M.review(mode)
 
 	local scope = "review"
 	local provider = provider_factory.create_provider(config.get_provider(scope), scope)
-	local all_requests, num_requests, line_count = provider.prepare_requests(fewshot.messages, review_mode)
-	requests.make_requests(namespace, provider, all_requests, num_requests, 0, line_count)
+	local request_bundle = provider.prepare_requests(fewshot.messages, review_mode)
+	requests.make_requests(namespace, provider, request_bundle)
 end
 
 function M.index()
@@ -63,13 +67,47 @@ end
 
 function M.clear()
 	local buffer_number = utils.get_buffer_number()
-	vim.diagnostic.reset(namespace, buffer_number)
+	local path = vim.api.nvim_buf_get_name(buffer_number)
+	local root = context_engine.find_repo_root(path ~= "" and path or vim.fn.getcwd())
+	review_store.clear_active_review(root)
+	review_renderer.clear_repo(root)
 end
 
 function M.clear_line()
 	local buffer_number = utils.get_buffer_number()
-	local line_num = vim.api.nvim_win_get_cursor(0)[1]
-	vim.diagnostic.set(namespace, buffer_number, {}, { lnum = line_num - 1 })
+	local path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buffer_number), ":p")
+	local root = context_engine.find_repo_root(path)
+	local review, active_entry = review_store.get_active_review(root)
+	if review == nil then
+		local line_num = vim.api.nvim_win_get_cursor(0)[1]
+		vim.diagnostic.set(namespace, buffer_number, {}, { lnum = line_num - 1 })
+		return
+	end
+
+	local relative_path = review.relative_path or path
+	local normalized_root = vim.fn.fnamemodify(root, ":p"):gsub("/+$", "")
+	local prefix = normalized_root .. "/"
+	if path:sub(1, #prefix) == prefix then
+		relative_path = path:sub(#prefix + 1)
+	end
+
+	local target_line = vim.api.nvim_win_get_cursor(0)[1]
+	local diagnostics = vim.diagnostic.get(buffer_number, { namespace = namespace })
+	local ids_to_hide = {}
+
+	for _, diagnostic in ipairs(diagnostics) do
+		if diagnostic.lnum + 1 == target_line and diagnostic.user_data and diagnostic.user_data.pitaco_item_id then
+			table.insert(ids_to_hide, diagnostic.user_data.pitaco_item_id)
+		end
+	end
+
+	if vim.tbl_isempty(ids_to_hide) then
+		vim.notify("No Pitaco review items found on the current line", vim.log.levels.INFO)
+		return
+	end
+
+	review_store.hide_items(root, ids_to_hide)
+	review_renderer.render_review(review)
 end
 
 function M.comment()
@@ -116,6 +154,10 @@ end
 
 function M.commit()
 	commit.run()
+end
+
+function M.reviews()
+	review_ui.open()
 end
 
 function M.models(scope)

@@ -88,8 +88,8 @@ function M.request(json_data, callback)
 	})
 end
 
-function M.parse_response(response)
-	local current_file = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":p")
+function M.parse_response(response, current_file)
+	current_file = current_file or vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":p")
 	return review_parser.parse_text(M.extract_text(response), current_file)
 end
 

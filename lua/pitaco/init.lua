@@ -107,6 +107,16 @@ function M.setup(opts)
 	vim.g.pitaco_context_include_git_diff = opts.context_include_git_diff
 	vim.g.pitaco_debug = opts.debug
 	vim.g.pitaco_features = feature_overrides
+
+	local group = vim.api.nvim_create_augroup("PitacoReviewRestore", { clear = true })
+	local review_renderer = require("pitaco.review_renderer")
+
+	vim.api.nvim_create_autocmd({ "BufEnter", "BufWritePost", "TextChanged" }, {
+		group = group,
+		callback = function(args)
+			review_renderer.render_buffer(args.buf)
+		end,
+	})
 end
 
 return M
