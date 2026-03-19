@@ -378,6 +378,105 @@ local function parse_changed_files(diff_text)
 	return files
 end
 
+local function starts_with(value, prefix)
+	return value:sub(1, #prefix) == prefix
+end
+
+local function path_matches_excluded_file(path, excluded_files)
+	if type(path) ~= "string" or path == "" or type(excluded_files) ~= "table" then
+		return false
+	end
+
+	for _, candidate in ipairs(excluded_files) do
+		if type(candidate) == "string" and candidate ~= "" then
+			local suffix = "/" .. candidate
+			if path == candidate or path:sub(-#suffix) == suffix then
+				return true
+			end
+		end
+	end
+
+	return false
+end
+
+local function extract_diff_path(header_line, block_lines)
+	local left_path, right_path = header_line:match("^diff %-%-git a/(.-) b/(.-)$")
+	if right_path ~= nil and right_path ~= "/dev/null" then
+		return right_path
+	end
+	if left_path ~= nil and left_path ~= "/dev/null" then
+		return left_path
+	end
+
+	for _, line in ipairs(block_lines or {}) do
+		local plus_path = line:match("^%+%+%+ b/(.+)$")
+		if plus_path ~= nil and plus_path ~= "/dev/null" then
+			return plus_path
+		end
+
+		local minus_path = line:match("^%-%-%- a/(.+)$")
+		if minus_path ~= nil and minus_path ~= "/dev/null" then
+			return minus_path
+		end
+	end
+
+	return nil
+end
+
+function M.filter_prompt_git_diff(diff_text)
+	if type(diff_text) ~= "string" or diff_text == "" then
+		return "", {}
+	end
+
+	local excluded_files = config.get_prompt_diff_exclude_files()
+	if vim.tbl_isempty(excluded_files) then
+		return diff_text, {}
+	end
+
+	local kept_blocks = {}
+	local excluded_paths = {}
+	local current_block = nil
+	local current_path = nil
+
+	local function flush_block()
+		if current_block == nil or vim.tbl_isempty(current_block) then
+			return
+		end
+
+		if not path_matches_excluded_file(current_path, excluded_files) then
+			table.insert(kept_blocks, table.concat(current_block, "\n"))
+			return
+		end
+
+		if current_path ~= nil and current_path ~= "" then
+			table.insert(excluded_paths, current_path)
+		end
+	end
+
+	for _, line in ipairs(vim.split(diff_text, "\n", { plain = true })) do
+		if starts_with(line, "diff --git ") then
+			flush_block()
+			current_block = { line }
+			current_path = extract_diff_path(line, current_block)
+		elseif current_block ~= nil then
+			table.insert(current_block, line)
+			if current_path == nil then
+				current_path = extract_diff_path("", current_block)
+			end
+		else
+			table.insert(kept_blocks, line)
+		end
+	end
+
+	flush_block()
+
+	if #excluded_paths > 1 then
+		table.sort(excluded_paths)
+	end
+
+	return vim.trim(table.concat(kept_blocks, "\n")), excluded_paths
+end
+
 function M.search(root, relative_path, limit)
 	local result, error_message = run_cli({
 		"search",
@@ -476,7 +575,15 @@ function M.collect_review_context(bufnr, review_mode)
 	local changed_outline = nil
 	local outline_error = nil
 	if review_mode == "diff" then
-		git_diff, diff_error = M.get_branch_git_diff(root, base_branch)
+		local raw_git_diff
+		raw_git_diff, diff_error = M.get_branch_git_diff(root, base_branch)
+		git_diff = raw_git_diff
+		if raw_git_diff ~= "" then
+			git_diff = M.filter_prompt_git_diff(raw_git_diff)
+			if git_diff == "" and diff_error == nil then
+				diff_error = "Pitaco: only excluded lockfile changes were found in the branch diff"
+			end
+		end
 	elseif config.should_include_git_diff() then
 		git_diff = M.get_file_git_diff(root, relative_path)
 	end

@@ -146,6 +146,10 @@ Keep the summary concise and ready to paste into GitHub.
     context_max_chunks = 6,
     context_timeout_ms = 1500,
     context_include_git_diff = true,
+    prompt_diff_exclude_files = {
+        "package-lock.json",
+        "yarn.lock",
+    },
 })
 ```
 
@@ -161,6 +165,9 @@ You can temporarily override it during the current Neovim session with:
 `features.summary.additional_instruction` is appended to PR summary requests.
 `ollama_options` is merged into Ollama chat requests as the `options` payload.
 `features.<scope>.ollama_options` overrides or extends the base `ollama_options` for that scope.
+`prompt_diff_exclude_files` removes matching files from AI-bound git diffs used by `:Pitaco review diff`, `:Pitaco summary`, and `:Pitaco commit`.
+By default Pitaco excludes common lockfiles such as `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, and `Cargo.lock`.
+Set `prompt_diff_exclude_files = false` to disable the filter, or pass your own list of repo-relative paths/basenames to override it.
 
 Provider/model selection resolves like this:
 - Base defaults come from `provider` and `model_id`.

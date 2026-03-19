@@ -21,6 +21,7 @@ local default_opts = {
 	context_max_chunks = 6,
 	context_timeout_ms = 1500,
 	context_include_git_diff = true,
+	prompt_diff_exclude_files = nil,
 	debug = false,
 	features = {},
 }
@@ -113,6 +114,9 @@ function M.setup(opts)
 	vim.g.pitaco_context_max_chunks = opts.context_max_chunks
 	vim.g.pitaco_context_timeout_ms = opts.context_timeout_ms
 	vim.g.pitaco_context_include_git_diff = opts.context_include_git_diff
+	vim.g.pitaco_prompt_diff_exclude_files = type(opts.prompt_diff_exclude_files) == "table"
+			and vim.deepcopy(opts.prompt_diff_exclude_files)
+		or opts.prompt_diff_exclude_files
 	vim.g.pitaco_debug = opts.debug
 	vim.g.pitaco_features = feature_overrides
 

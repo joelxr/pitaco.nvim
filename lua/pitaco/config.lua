@@ -7,6 +7,19 @@ local DEFAULT_MODELS = {
 	ollama = "llama3.1",
 }
 
+local DEFAULT_PROMPT_DIFF_EXCLUDE_FILES = {
+	"package-lock.json",
+	"npm-shrinkwrap.json",
+	"yarn.lock",
+	"pnpm-lock.yaml",
+	"bun.lock",
+	"bun.lockb",
+	"Cargo.lock",
+	"Gemfile.lock",
+	"composer.lock",
+	"Podfile.lock",
+}
+
 local BUILTIN_FEATURE_SCOPES = {
 	review = true,
 	commit = true,
@@ -292,6 +305,19 @@ end
 
 function M.should_include_git_diff()
 	return vim.g.pitaco_context_include_git_diff ~= false
+end
+
+function M.get_prompt_diff_exclude_files()
+	local configured = vim.g.pitaco_prompt_diff_exclude_files
+	if configured == false then
+		return {}
+	end
+
+	if type(configured) == "table" then
+		return vim.deepcopy(configured)
+	end
+
+	return vim.deepcopy(DEFAULT_PROMPT_DIFF_EXCLUDE_FILES)
 end
 
 function M.get_model(provider, scope)

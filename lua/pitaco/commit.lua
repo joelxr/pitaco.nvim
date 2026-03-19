@@ -2,6 +2,7 @@ local M = {}
 
 local provider_factory = require("pitaco.providers.factory")
 local config = require("pitaco.config")
+local context_engine = require("pitaco.context_engine")
 local progress = require("pitaco.progress")
 local log = require("pitaco.log")
 local response_utils = require("pitaco.providers.response_utils")
@@ -311,12 +312,22 @@ function M.run()
 	local diff_for_ai = staged_diff ~= "" and staged_diff or unstaged_diff
 	local needs_stage = staged_diff == ""
 	local has_unstaged = unstaged_diff ~= ""
+	local filtered_diff, excluded_paths = context_engine.filter_prompt_git_diff(diff_for_ai)
+
+	if filtered_diff == "" then
+		if #excluded_paths > 0 then
+			vim.notify("Pitaco commit: only excluded lockfile changes were found in the prompt diff", vim.log.levels.INFO)
+		else
+			vim.notify("Pitaco commit: no usable diff remained for commit generation", vim.log.levels.INFO)
+		end
+		return
+	end
 
 	local system_prompt = build_commit_system_prompt()
 	local messages = {
 		{
 			role = "user",
-			content = diff_for_ai,
+			content = filtered_diff,
 		},
 	}
 
