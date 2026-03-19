@@ -1,4 +1,4 @@
-*pitaco.nvim.txt*          For NVIM v0.8.0          Last change: 2026 March 17
+*pitaco.nvim.txt*          For NVIM v0.8.0          Last change: 2026 March 19
 
 ==============================================================================
 Table of Contents                              *pitaco.nvim-table-of-contents*
@@ -196,11 +196,11 @@ prompt. `features.summary.additional_instruction` is appended to PR summary
 requests. `ollama_options` is merged into Ollama chat requests as the `options`
 payload. `features.<scope>.ollama_options` overrides or extends the base
 `ollama_options` for that scope. `prompt_diff_exclude_files` removes matching
-files from AI-bound git diffs used by `:Pitaco review diff`, `:Pitaco
-summary`, and `:Pitaco commit`. By default Pitaco excludes common lockfiles
-such as `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, and `Cargo.lock`.
-Set `prompt_diff_exclude_files = false` to disable the filter, or pass your
-own list of repo-relative paths/basenames to override it.
+files from AI-bound git diffs used by `:Pitaco review diff`, `:Pitaco summary`,
+and `:Pitaco commit`. By default Pitaco excludes common lockfiles such as
+`package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, and `Cargo.lock`. Set
+`prompt_diff_exclude_files = false` to disable the filter, or pass your own
+list of repo-relative paths/basenames to override it.
 
 Provider/model selection resolves like this: - Base defaults come from
 `provider` and `model_id`. - Feature-specific overrides can be set under
