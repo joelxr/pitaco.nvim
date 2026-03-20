@@ -505,6 +505,19 @@ function M.search(root, relative_path, limit)
 	return decoded, nil
 end
 
+local function has_indexed_context(search_result)
+	if type(search_result) ~= "table" then
+		return false
+	end
+
+	local summary = search_result.summary
+	if type(summary) == "table" and (tonumber(summary.file_count) or 0) > 0 then
+		return true
+	end
+
+	return type(search_result.results) == "table" and not vim.tbl_isempty(search_result.results)
+end
+
 function M.outline(root, changed_files)
 	if type(changed_files) ~= "table" or vim.tbl_isempty(changed_files) then
 		return { files = {} }, nil
@@ -564,6 +577,9 @@ function M.collect_review_context(bufnr, review_mode)
 	local root = M.find_repo_root(buffer_path)
 	local relative_path = to_repo_relative_path(root, buffer_path)
 	local search_result, search_error = M.search(root, relative_path, config.get_context_max_chunks())
+	if search_error == nil and not has_indexed_context(search_result) then
+		search_error = "Pitaco context index missing or empty for this repository; run :Pitaco index"
+	end
 
 	if search_error ~= nil then
 		log.debug("context search failed: " .. search_error)
@@ -605,11 +621,11 @@ function M.collect_review_context(bufnr, review_mode)
 	end
 
 	return {
-		enabled = search_result ~= nil,
+		enabled = search_result ~= nil and search_error == nil,
 		root = root,
 		relative_path = relative_path,
-		project_summary = search_result and search_result.summary or nil,
-		relevant_chunks = search_result and search_result.results or {},
+		project_summary = search_error == nil and search_result and search_result.summary or nil,
+		relevant_chunks = search_error == nil and search_result and search_result.results or {},
 		search_engine = search_result and search_result.engine or nil,
 		base_branch = base_branch,
 		git_diff = git_diff,

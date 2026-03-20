@@ -6,13 +6,12 @@ local log = require("pitaco.log")
 local progress = require("pitaco.progress")
 local prompt_context = require("pitaco.prompt_context")
 local provider_factory = require("pitaco.providers.factory")
-local utils = require("pitaco.utils")
 
 local function split_lines(text)
 	return vim.split(text, "\n", { plain = true })
 end
 
-local function build_user_prompt(summary_context, file_chunk)
+local function build_user_prompt(summary_context)
 	local sections = {
 		"You are preparing a pull request summary for the current branch changes.",
 		"Describe what this branch changes, why those changes were made, and the expected risk or impact.",
@@ -21,27 +20,28 @@ local function build_user_prompt(summary_context, file_chunk)
 		"Do not say that context is missing or that the diff is hard to determine.",
 		"Do not mention your limitations or reasoning process.",
 		"Use exactly these top-level markdown sections in this order: `## What changed`, `## Why`, `## Risk/Impact`.",
-		"Under each section, use short bullet points grounded in the actual diff and repository context.",
+		"Base the summary primarily on the branch diff and changed-file outline.",
+		"Use repository metadata only as lightweight supporting context.",
+		"Under each section, use short bullet points grounded first in the actual diff and then in the repository context.",
+		"In `## Risk/Impact`, describe likely effects of the change itself. Do not mention test coverage, missing tests, or validation advice.",
 		"If a motivation is not explicit, infer the most likely intent from the diff and state it directly.",
 		"Do not include any text before `## What changed` or after the `## Risk/Impact` section.",
-		"",
-		"Project summary:",
-		prompt_context.build_project_summary(summary_context.project_summary),
-		"",
-		"Relevant project code:",
-		prompt_context.build_relevant_chunks(summary_context.relevant_chunks),
-		"",
-		("Current buffer: %s"):format(summary_context.relative_path or utils.get_buf_name(0)),
-		"Summary scope: branch diff",
-		prompt_context.build_numbered_buffer_section(file_chunk),
-		"",
-		("Base branch: %s"):format(summary_context.base_branch or "unknown"),
-		"Changed code structure:",
-		prompt_context.build_changed_outline(summary_context.changed_outline),
-		"",
-		"Branch diff:",
-		prompt_context.trim_text(summary_context.git_diff),
 	}
+
+	if prompt_context.has_project_summary(summary_context.project_summary) then
+		table.insert(sections, "")
+		table.insert(sections, "Project summary:")
+		table.insert(sections, prompt_context.build_project_summary(summary_context.project_summary))
+	end
+
+	table.insert(sections, "")
+	table.insert(sections, "Summary scope: branch diff")
+	table.insert(sections, ("Base branch: %s"):format(summary_context.base_branch or "unknown"))
+	table.insert(sections, "Changed code structure:")
+	table.insert(sections, prompt_context.build_changed_outline(summary_context.changed_outline))
+	table.insert(sections, "")
+	table.insert(sections, "Branch diff:")
+	table.insert(sections, prompt_context.trim_text(summary_context.git_diff))
 
 	local additional_instruction = prompt_context.trim_text(config.get_summary_additional_instruction())
 	if additional_instruction ~= "" then
@@ -162,10 +162,13 @@ end
 function M.run()
 	local scope = "summary"
 	local provider = provider_factory.create_provider(config.get_provider(scope), scope)
-	local buffer_number = utils.get_buffer_number()
-	local lines = vim.api.nvim_buf_get_lines(buffer_number, 0, -1, false)
+	local buffer_number = vim.api.nvim_get_current_buf()
 	local summary_context = context_engine.collect_review_context(buffer_number, "diff")
 	local diff_text = prompt_context.trim_text(summary_context.git_diff)
+
+	if summary_context.search_error ~= nil then
+		vim.notify(summary_context.search_error, vim.log.levels.WARN)
+	end
 
 	if diff_text == "" then
 		local message = summary_context.diff_error
@@ -174,11 +177,10 @@ function M.run()
 		return
 	end
 
-	local file_chunk = utils.prepare_code_snippet(buffer_number, 1, math.max(#lines, 1))
 	local messages = {
 		{
 			role = "user",
-			content = build_user_prompt(summary_context, file_chunk),
+			content = build_user_prompt(summary_context),
 		},
 	}
 

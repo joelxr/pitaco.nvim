@@ -214,7 +214,10 @@ end
 function M.debug(value)
 	if value == nil or value == "" then
 		vim.notify(
-			("Pitaco debug: %s"):format(config.is_debug_enabled() and "enabled" or "disabled"),
+			("Pitaco debug: %s\nlog file: %s"):format(
+				config.is_debug_enabled() and "enabled" or "disabled",
+				config.get_debug_log_path()
+			),
 			vim.log.levels.INFO
 		)
 		return
@@ -233,7 +236,10 @@ function M.debug(value)
 	end
 
 	vim.notify(
-		("Pitaco debug %s"):format(config.is_debug_enabled() and "enabled" or "disabled"),
+		("Pitaco debug %s\nlog file: %s"):format(
+			config.is_debug_enabled() and "enabled" or "disabled",
+			config.get_debug_log_path()
+		),
 		vim.log.levels.INFO
 	)
 end

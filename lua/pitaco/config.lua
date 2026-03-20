@@ -143,7 +143,7 @@ end
 function M.get_summary_system_prompt()
 	local default_summary_system_prompt = [[
 You are generating a pull request summary from repository-aware context.
-You will receive repository context, relevant project code chunks, the current buffer contents, and the full branch diff against the repository base branch.
+You will receive lightweight repository context, changed-file structure, and the full branch diff against the repository base branch.
 
 Your job is to summarize the intended branch changes for a PR description.
 
@@ -158,8 +158,11 @@ Rules:
   ## Risk/Impact
 - Under each section, use concise bullet points.
 - Be concrete and specific to the actual diff.
+- Base the summary primarily on the branch diff. Treat all other context as secondary.
 - Focus on intended behavior and meaningful implementation details.
 - Mention user-visible, API, data, workflow, or operational impact when relevant.
+- Do not mention testing needs, missing tests, recommendations, or follow-up work.
+- In `## Risk/Impact`, describe likely behavioral or operational effects of the change itself, not advice about what should be validated.
 - If the reason for a change is not explicit, infer cautiously from the diff and context.
 - Keep the summary concise but useful for a GitHub PR description.
   ]]
@@ -281,6 +284,15 @@ function M.get_ollama_options(scope)
 	end
 
 	return next(base) ~= nil and base or nil
+end
+
+function M.get_debug_log_path()
+	local configured = vim.g.pitaco_debug_log_path
+	if type(configured) == "string" and configured ~= "" then
+		return vim.fn.expand(configured)
+	end
+
+	return vim.fs.joinpath(vim.fn.stdpath("state"), "pitaco", "debug.log")
 end
 
 function M.is_debug_enabled()

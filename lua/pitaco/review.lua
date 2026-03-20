@@ -38,16 +38,23 @@ local function build_user_prompt(review_context, file_chunk, review_mode)
 	local review_scope = review_mode == "file" and "entire file" or "branch diff"
 	local sections = {
 		table.concat(build_prompt_header(review_mode), "\n"),
-		"",
-		"Project summary:",
-		prompt_context.build_project_summary(review_context.project_summary),
-		"",
-		"Relevant project code:",
-		prompt_context.build_relevant_chunks(review_context.relevant_chunks),
-		"",
 		("Current buffer: %s"):format(review_context.relative_path or utils.get_buf_name(0)),
 		("Review scope: %s"):format(review_scope),
 	}
+
+	if prompt_context.has_project_summary(review_context.project_summary) then
+		table.insert(sections, "")
+		table.insert(sections, "Project summary:")
+		table.insert(sections, prompt_context.build_project_summary(review_context.project_summary))
+	end
+
+	if prompt_context.has_relevant_chunks(review_context.relevant_chunks) then
+		table.insert(sections, "")
+		table.insert(sections, "Relevant project code:")
+		table.insert(sections, prompt_context.build_relevant_chunks(review_context.relevant_chunks))
+	end
+
+	table.insert(sections, "")
 
 	if review_mode == "file" then
 		table.insert(sections, ("File under review: %s"):format(review_context.relative_path or utils.get_buf_name(0)))
@@ -88,6 +95,12 @@ function M.build_requests(provider, fewshot_messages, review_mode)
 	local mode = review_mode == "file" and "file" or "diff"
 	local review_context = context_engine.collect_review_context(buffer_number, mode)
 	local diff_text = prompt_context.trim_text(review_context.git_diff)
+
+	if review_context.search_error ~= nil then
+		vim.schedule(function()
+			vim.notify(review_context.search_error, vim.log.levels.WARN)
+		end)
+	end
 
 	if mode == "diff" and diff_text == "" then
 		vim.schedule(function()

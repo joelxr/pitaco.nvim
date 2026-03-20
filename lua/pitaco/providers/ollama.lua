@@ -2,6 +2,7 @@ local M = {}
 local log = require("pitaco.log")
 local review = require("pitaco.review")
 local review_parser = require("pitaco.review_parser")
+local request_body = require("pitaco.providers.request_body")
 local response_utils = require("pitaco.providers.response_utils")
 
 M.name = "ollama"
@@ -63,14 +64,16 @@ function M.request(json_data, callback)
 	end
 
 	log.preview_json("ollama request body", json_data)
+	local body_state = request_body.prepare(json_data)
 
-	curl.post(url, {
+	local ok, request_error = pcall(curl.post, url, {
 		headers = {
 			["Content-Type"] = "application/json",
 		},
-		body = json_data,
+		in_file = body_state.path,
 		timeout = 30000,
 		callback = function(response)
+			request_body.cleanup(body_state)
 			log.debug(("ollama response status=%s"):format(tostring(response.status)))
 			log.preview_text("ollama raw response body", response.body, 500)
 
@@ -92,6 +95,11 @@ function M.request(json_data, callback)
 			end)
 		end,
 	})
+
+	if not ok then
+		request_body.cleanup(body_state)
+		callback(nil, "Request failed before dispatch: " .. tostring(request_error))
+	end
 end
 
 function M.parse_response(response, current_file)

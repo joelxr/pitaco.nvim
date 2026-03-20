@@ -8,6 +8,14 @@ local function format_list(items)
 	return table.concat(items, ", ")
 end
 
+function M.has_project_summary(summary)
+	return type(summary) == "table" and (tonumber(summary.file_count) or 0) > 0
+end
+
+function M.has_relevant_chunks(chunks)
+	return type(chunks) == "table" and not vim.tbl_isempty(chunks)
+end
+
 function M.trim_text(value)
 	if type(value) ~= "string" then
 		return ""
@@ -29,10 +37,6 @@ function M.build_numbered_buffer_section(file_chunk)
 end
 
 function M.build_project_summary(summary)
-	if type(summary) ~= "table" then
-		return "Project summary unavailable."
-	end
-
 	return table.concat({
 		("Repository: %s"):format(summary.repository_name or "unknown"),
 		("Indexed files: %s"):format(summary.file_count or 0),
@@ -43,10 +47,6 @@ function M.build_project_summary(summary)
 end
 
 function M.build_relevant_chunks(chunks)
-	if type(chunks) ~= "table" or vim.tbl_isempty(chunks) then
-		return "No related code chunks were retrieved."
-	end
-
 	local sections = {}
 	for _, chunk in ipairs(chunks) do
 		table.insert(sections, ("--- %s (%s, score=%.3f) ---\n%s"):format(
@@ -55,6 +55,42 @@ function M.build_relevant_chunks(chunks)
 			tonumber(chunk.score) or 0,
 			chunk.code or ""
 		))
+	end
+
+	return table.concat(sections, "\n\n")
+end
+
+function M.truncate_text(value, max_chars)
+	if type(value) ~= "string" then
+		return ""
+	end
+
+	local text = vim.trim(value)
+	if max_chars == nil or max_chars <= 0 or #text <= max_chars then
+		return text
+	end
+
+	return vim.trim(text:sub(1, max_chars)) .. "\n...(truncated)"
+end
+
+function M.build_compact_relevant_chunks(chunks, opts)
+	local max_chunks = opts and opts.max_chunks or 2
+	local max_chars = opts and opts.max_chars or 1200
+	local sections = {}
+
+	for index, chunk in ipairs(chunks or {}) do
+		if index > max_chunks then
+			break
+		end
+
+		table.insert(sections, table.concat({
+			("--- %s (%s, score=%.3f) ---"):format(
+				chunk.file or "unknown",
+				chunk.symbol or chunk.kind or "chunk",
+				tonumber(chunk.score) or 0
+			),
+			M.truncate_text(chunk.code or "", max_chars),
+		}, "\n"))
 	end
 
 	return table.concat(sections, "\n\n")
@@ -105,8 +141,6 @@ function M.build_changed_outline(outline_files)
 			("File: %s"):format(entry.file or "unknown"),
 			("Language: %s"):format(entry.language or "unknown"),
 			("Changed lines: %s"):format(format_line_ranges(entry.changedLines)),
-			("Imports: %s"):format(format_list(entry.imports)),
-			("Exports: %s"):format(format_list(entry.exports)),
 			("Changed symbols: %s"):format(#symbols > 0 and table.concat(symbols, "; ") or "none"),
 		}, "\n"))
 	end

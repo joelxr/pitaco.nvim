@@ -106,7 +106,8 @@ require('pitaco').setup({
         num_ctx = 8192,
     },
     language = "english",
-    debug = false, -- Enable request/response debug logs via vim.notify
+    debug = false, -- Enable request/response debug logs via vim.notify and a saved log file
+    debug_log_path = nil, -- Optional path for full debug logs; defaults to stdpath("state") .. "/pitaco/debug.log"
     commit_keymap = "<leader>at", -- Optional mapping for :Pitaco commit
     persist_model_selection = true, -- Save :Pitaco models [scope] selections in the state file
     features = {
@@ -321,7 +322,7 @@ Recommended embedding providers:
 
 When no remote embedding provider is configured, the indexer falls back to a local hashed embedding so the workflow still works offline.
 
-When `debug = true`, Pitaco emits request lifecycle logs for provider calls, including payload previews, HTTP status, decode failures, and response previews.
+When `debug = true`, Pitaco emits request lifecycle logs for provider calls, including payload previews, HTTP status, decode failures, and response previews. Those events are also appended in full to a saved debug log file at `stdpath("state") .. "/pitaco/debug.log"` by default, or to `debug_log_path` when configured.
 
 The model picker discovers models from provider APIs (with default fallback when needed), including:
 - provider readiness (key configured / ollama reachable)

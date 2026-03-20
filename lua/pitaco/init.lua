@@ -23,6 +23,7 @@ local default_opts = {
 	context_include_git_diff = true,
 	prompt_diff_exclude_files = nil,
 	debug = false,
+	debug_log_path = nil,
 	features = {},
 }
 
@@ -118,6 +119,7 @@ function M.setup(opts)
 			and vim.deepcopy(opts.prompt_diff_exclude_files)
 		or opts.prompt_diff_exclude_files
 	vim.g.pitaco_debug = opts.debug
+	vim.g.pitaco_debug_log_path = opts.debug_log_path
 	vim.g.pitaco_features = feature_overrides
 
 	local group = vim.api.nvim_create_augroup("PitacoReviewRestore", { clear = true })
