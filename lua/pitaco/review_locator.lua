@@ -60,7 +60,8 @@ function M.resolve(item, lines)
 	end
 
 	if type(lines) ~= "table" or vim.tbl_isempty(lines) then
-		return 1, "fallback"
+		local original_line = tonumber(item.original_line) or 1
+		return math.max(original_line, 1), "fallback"
 	end
 
 	local original_line = tonumber(item.original_line) or 1
@@ -84,7 +85,7 @@ function M.resolve(item, lines)
 		return global_index, "moved"
 	end
 
-	return 1, "fallback"
+	return original_line, "fallback"
 end
 
 return M

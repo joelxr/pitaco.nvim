@@ -1,6 +1,6 @@
 local config = require("pitaco.config")
-local context_engine = require("pitaco.context_engine")
 local prompt_context = require("pitaco.prompt_context")
+local review_context_builder = require("pitaco.review_context")
 local utils = require("pitaco.utils")
 
 local M = {}
@@ -15,6 +15,7 @@ local function build_prompt_header(review_mode)
 			"If you cannot anchor a cross-file issue to a specific file and line, omit it.",
 			"For issues in the current file, use the exact source line number shown in the prefixed buffer listing below.",
 			"Choose the most specific relevant line. Do not default to the function declaration unless the declaration itself is the problem.",
+			"Return only finding lines. Do not add introductions, headings, numbering, bullets, markdown, or blank lines.",
 			"Focus on high-confidence problems that can cause bugs, regressions, missing edge cases, contract mismatches, broken UX flows, or materially harmful performance behavior.",
 			"Avoid nitpicks, naming/style preferences, comment requests, and generic refactor suggestions unless they point to a concrete defect risk.",
 			"If there are no meaningful issues, return no findings.",
@@ -27,8 +28,11 @@ local function build_prompt_header(review_mode)
 		"Every finding in diff mode must be anchored to the actual changed file using `file=<repo-relative-path> line=<num>:`.",
 		"Do not use plain `line=` in diff mode.",
 		"If you cannot anchor an issue to a specific changed file and line, omit it.",
-		"When referring to the current buffer, use the exact source line number shown in the prefixed buffer listing below.",
-		"Use the current buffer contents and repository context only to understand the branch diff; findings should stay grounded in the actual changes under review.",
+		"Return only finding lines. Do not add introductions, headings, numbering, bullets, markdown, or blank lines.",
+		"Treat the branch diff as primary evidence. Use repository context only to confirm impact or locate affected callers/tests.",
+		"Ignore retrieved matches that only share generic names, comments, fixture data, or common words and do not show a real code dependency.",
+		"Do not report a claim that contradicts the shown diff or code. Verify import names, function calls, argument lists, and recursion paths against the visible snippets before reporting them.",
+		"Use the repository context only to understand the branch diff; findings should stay grounded in the actual changes under review.",
 		"Avoid nitpicks, naming/style preferences, comment requests, and generic refactor suggestions unless they point to a concrete defect risk.",
 		"If there are no meaningful issues, return no findings.",
 	}
@@ -38,9 +42,12 @@ local function build_user_prompt(review_context, file_chunk, review_mode)
 	local review_scope = review_mode == "file" and "entire file" or "branch diff"
 	local sections = {
 		table.concat(build_prompt_header(review_mode), "\n"),
-		("Current buffer: %s"):format(review_context.relative_path or utils.get_buf_name(0)),
 		("Review scope: %s"):format(review_scope),
 	}
+
+	if review_mode == "file" then
+		table.insert(sections, 2, ("Current buffer: %s"):format(review_context.relative_path or utils.get_buf_name(0)))
+	end
 
 	if prompt_context.has_project_summary(review_context.project_summary) then
 		table.insert(sections, "")
@@ -51,22 +58,43 @@ local function build_user_prompt(review_context, file_chunk, review_mode)
 	if prompt_context.has_relevant_chunks(review_context.relevant_chunks) then
 		table.insert(sections, "")
 		table.insert(sections, "Relevant project code:")
-		table.insert(sections, prompt_context.build_relevant_chunks(review_context.relevant_chunks))
+		if review_mode == "diff" then
+			table.insert(sections, prompt_context.build_compact_relevant_chunks(review_context.relevant_chunks, {
+				max_chunks = 2,
+				max_chars = 700,
+			}))
+		else
+			table.insert(sections, prompt_context.build_relevant_chunks(review_context.relevant_chunks))
+		end
 	end
 
 	table.insert(sections, "")
 
 	if review_mode == "file" then
 		table.insert(sections, ("File under review: %s"):format(review_context.relative_path or utils.get_buf_name(0)))
+		table.insert(sections, prompt_context.build_numbered_buffer_section(file_chunk))
 	end
-
-	table.insert(sections, prompt_context.build_numbered_buffer_section(file_chunk))
 
 	if review_mode == "diff" then
 		table.insert(sections, "")
 		table.insert(sections, ("Base branch: %s"):format(review_context.base_branch or "unknown"))
 		table.insert(sections, "Changed code structure:")
 		table.insert(sections, prompt_context.build_changed_outline(review_context.changed_outline))
+		if type(review_context.file_consumers) == "table" and not vim.tbl_isempty(review_context.file_consumers) then
+			table.insert(sections, "")
+			table.insert(sections, "Likely direct consumers of changed files:")
+			table.insert(sections, prompt_context.build_file_consumers(review_context.file_consumers))
+		end
+		if type(review_context.related_tests) == "table" and not vim.tbl_isempty(review_context.related_tests) then
+			table.insert(sections, "")
+			table.insert(sections, "Likely related tests:")
+			table.insert(sections, prompt_context.build_related_tests(review_context.related_tests))
+		end
+		if type(review_context.symbol_usages) == "table" and not vim.tbl_isempty(review_context.symbol_usages) then
+			table.insert(sections, "")
+			table.insert(sections, "Likely downstream usages of changed symbols:")
+			table.insert(sections, prompt_context.build_symbol_usages(review_context.symbol_usages))
+		end
 		table.insert(sections, "")
 		table.insert(sections, "Branch diff:")
 		table.insert(sections, prompt_context.trim_text(review_context.git_diff))
@@ -93,7 +121,7 @@ function M.build_requests(provider, fewshot_messages, review_mode)
 	local buffer_path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buffer_number), ":p")
 	local lines = vim.api.nvim_buf_get_lines(buffer_number, 0, -1, false)
 	local mode = review_mode == "file" and "file" or "diff"
-	local review_context = context_engine.collect_review_context(buffer_number, mode)
+	local review_context = review_context_builder.collect(buffer_number, mode)
 	local diff_text = prompt_context.trim_text(review_context.git_diff)
 
 	if review_context.search_error ~= nil then
@@ -141,8 +169,9 @@ function M.build_requests(provider, fewshot_messages, review_mode)
 			provider = provider.name,
 			model_id = provider.get_model and provider.get_model() or nil,
 			base_branch = review_context.base_branch,
-			merge_base = context_engine.get_merge_base(repo_root, review_context.base_branch),
-			head = context_engine.get_head_commit(repo_root),
+			changed_outline = review_context.changed_outline,
+			merge_base = require("pitaco.context_engine").get_merge_base(repo_root, review_context.base_branch),
+			head = require("pitaco.context_engine").get_head_commit(repo_root),
 			content_hash = vim.fn.sha256(content_source or ""),
 		},
 	}

@@ -1,0 +1,8 @@
+- [x] Query review context from diff hunks and changed symbols, not mainly from the current file's semantic search.
+- [ ] Send some review context as structured JSON blocks, not only prose sections.
+- [ ] Rank and split retrieved context by impact surface: directly changed code, direct consumers, related tests, downstream usages, then similar code.
+- [ ] Build a lightweight symbol graph with relations like defines/imports/calls/extends and retrieve graph neighbors for changed code.
+- [ ] Use LSP, when available, for references, call hierarchy, workspace symbols, and type hierarchy.
+- [ ] Add quality filters so generic names like `child`, `result`, `_`, `data`, `params` do not pollute usages or related-test retrieval.
+- [ ] Tighten prompt/output handling so speculative or weak findings are less likely to become diagnostics.
+- [ ] Continue improving diagnostic placement and anchor validation when the model chooses a weak or ambiguous line.

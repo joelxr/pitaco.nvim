@@ -2,6 +2,7 @@ local progress = require("pitaco.progress")
 local utils = require("pitaco.utils")
 local log = require("pitaco.log")
 local context_engine = require("pitaco.context_engine")
+local review_diagnostics = require("pitaco.review_diagnostics")
 local review_renderer = require("pitaco.review_renderer")
 local review_store = require("pitaco.review_store")
 
@@ -149,7 +150,13 @@ function M.make_requests(namespace, provider, request_bundle)
 			log.debug(("Parsed %d diagnostics from provider response"):format(#diagnostics))
 			log.debug_table("parsed diagnostics", diagnostics)
 
-			for _, diag in ipairs(diagnostics) do
+			local normalized_diagnostics, dropped_count = review_diagnostics.normalize(metadata, diagnostics)
+			if dropped_count > 0 then
+				log.debug(("Dropped or corrected %d diagnostics during anchor normalization"):format(dropped_count))
+			end
+			log.debug_table("normalized diagnostics", normalized_diagnostics)
+
+			for _, diag in ipairs(normalized_diagnostics) do
 				local stored = vim.deepcopy(diag)
 				local target = diag.file or metadata.buffer_path
 				if type(target) == "string" and target ~= "" and not target:find("^/") then

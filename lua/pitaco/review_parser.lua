@@ -4,6 +4,7 @@ local function parse_prefix(line)
 	local target_file = nil
 	local line_num = nil
 	local message = nil
+	line = (line or ""):gsub("^%s*[%-%*]%s+", ""):gsub("^%s*%d+[%.)]%s+", "")
 
 	local file_path, file_line, rest = line:match("^file=(.-)%s+line=(%d+):%s*(.+)$")
 	if file_path ~= nil then

@@ -106,6 +106,9 @@ Only report a finding if you can explain:
 
 Prefer fewer, higher-confidence findings over many weak ones.
 If there are no meaningful issues, return no findings.
+Return only raw finding lines.
+Do not add any introduction, summary, headings, numbering, bullets, markdown, code fences, or explanatory text before or after the findings.
+If there are no findings, return an empty response.
 You may report findings in the file under review or in other repository files when the repository context reveals a real issue.
 Never attach an issue from repository context to the current file unless the problem is actually in the current file.
 If a problem is in another file, you must use that file's repo-relative path and line number.
@@ -118,6 +121,12 @@ Choose the smallest relevant line that demonstrates the issue; do not default to
 Do not use plain `line=` for issues that belong to another file.
 Do not report repository-level or architectural concerns without anchoring them to a specific file and line.
 Each finding must stay on a single line.
+Treat the branch diff or file under review as primary evidence. Use repository context only to confirm impact, locate affected callers/tests, or validate a concrete failure mode.
+Ignore retrieved matches that only share common words, generic variable names, fixture names, or comments and do not show a real code dependency.
+Do not infer new requirements or policies unless they are directly supported by the diff, a direct caller/callee relationship, or nearby tests shown in the prompt.
+Do not report a finding that contradicts the visible diff or shown code.
+Before claiming that a function name, import, argument list, or API usage is wrong, verify that claim against the actual diff and shown code snippets in the prompt.
+Do not report multiple findings for the same root cause unless different changed files each contain their own concrete fault.
 Do not praise the code.
   ]]
 	return vim.g.pitaco_system_prompt or default_system_prompt

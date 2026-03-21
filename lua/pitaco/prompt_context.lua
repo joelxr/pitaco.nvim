@@ -148,4 +148,98 @@ function M.build_changed_outline(outline_files)
 	return table.concat(sections, "\n\n")
 end
 
+function M.build_symbol_usages(symbol_usages)
+	if type(symbol_usages) ~= "table" or vim.tbl_isempty(symbol_usages) then
+		return "No likely downstream usages were retrieved for the changed symbols."
+	end
+
+	local sections = {}
+	for _, entry in ipairs(symbol_usages) do
+		local matches = {}
+		for _, match in ipairs(entry.matches or {}) do
+			local header = ("%s:%d:%d"):format(
+				match.file or "unknown",
+				tonumber(match.line) or 0,
+				tonumber(match.column) or 0
+			)
+			local body = M.truncate_text(match.snippet or match.text or "", 400)
+			table.insert(matches, table.concat({ header, body }, "\n"))
+		end
+
+		table.insert(sections, table.concat({
+			("Symbol: %s"):format(entry.symbol or "unknown"),
+			("Defined in changed file: %s"):format(entry.definition_file or "unknown"),
+			(#matches > 0 and table.concat(matches, "\n\n") or "No matches"),
+		}, "\n"))
+	end
+
+	return table.concat(sections, "\n\n")
+end
+
+function M.build_file_consumers(file_consumers)
+	if type(file_consumers) ~= "table" or vim.tbl_isempty(file_consumers) then
+		return "No likely direct consumers were retrieved for the changed files."
+	end
+
+	local sections = {}
+	for _, entry in ipairs(file_consumers) do
+		local consumers = {}
+		for _, match in ipairs(entry.consumers or {}) do
+			local header = ("%s:%d:%d"):format(
+				match.file or "unknown",
+				tonumber(match.line) or 0,
+				tonumber(match.column) or 0
+			)
+			local via = match.candidate and match.candidate ~= "" and ("Matched import path: " .. match.candidate) or nil
+			local body = M.truncate_text(match.snippet or match.text or "", 400)
+			local parts = { header }
+			if via ~= nil then
+				table.insert(parts, via)
+			end
+			table.insert(parts, body)
+			table.insert(consumers, table.concat(parts, "\n"))
+		end
+
+		table.insert(sections, table.concat({
+			("Changed file: %s"):format(entry.file or "unknown"),
+			(#consumers > 0 and table.concat(consumers, "\n\n") or "No matches"),
+		}, "\n"))
+	end
+
+	return table.concat(sections, "\n\n")
+end
+
+function M.build_related_tests(related_tests)
+	if type(related_tests) ~= "table" or vim.tbl_isempty(related_tests) then
+		return "No likely related tests were retrieved for the changed files or symbols."
+	end
+
+	local sections = {}
+	for _, entry in ipairs(related_tests) do
+		local matches = {}
+		for _, match in ipairs(entry.matches or {}) do
+			local header = ("%s:%d:%d"):format(
+				match.file or "unknown",
+				tonumber(match.line) or 0,
+				tonumber(match.column) or 0
+			)
+			local via = match.candidate and match.candidate ~= "" and ("Matched test reference: " .. match.candidate) or nil
+			local body = M.truncate_text(match.snippet or match.text or "", 400)
+			local parts = { header }
+			if via ~= nil then
+				table.insert(parts, via)
+			end
+			table.insert(parts, body)
+			table.insert(matches, table.concat(parts, "\n"))
+		end
+
+		table.insert(sections, table.concat({
+			entry.label or "Related tests",
+			(#matches > 0 and table.concat(matches, "\n\n") or "No matches"),
+		}, "\n"))
+	end
+
+	return table.concat(sections, "\n\n")
+end
+
 return M
