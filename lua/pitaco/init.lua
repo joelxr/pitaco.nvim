@@ -11,6 +11,7 @@ local default_opts = {
 	model_id = nil,
 	ollama_url = "http://localhost:11434",
 	ollama_options = nil,
+	ollama_keep_alive = nil,
 	provider = "anthropic",
 	language = "english",
 	commit_keymap = nil,
@@ -34,6 +35,17 @@ local function merge_persisted_feature_overrides(features, persisted)
 
 	for scope, overrides in pairs(persisted) do
 		if type(scope) == "string" and scope ~= "" and type(overrides) == "table" then
+			if scope == "review" and type(overrides.verifier) == "table" then
+				features.review = features.review or {}
+				features.review.verifier = features.review.verifier or {}
+				if type(overrides.verifier.provider) == "string" and overrides.verifier.provider ~= "" then
+					features.review.verifier.provider = overrides.verifier.provider
+				end
+				if type(overrides.verifier.model_id) == "string" and overrides.verifier.model_id ~= "" then
+					features.review.verifier.model_id = overrides.verifier.model_id
+				end
+			end
+
 			features[scope] = features[scope] or {}
 			if type(overrides.provider) == "string" and overrides.provider ~= "" then
 				features[scope].provider = overrides.provider
@@ -60,6 +72,14 @@ local function extract_feature_overrides(opts)
 	end
 	if opts.review_model_id ~= nil then
 		ensure_scope("review").model_id = opts.review_model_id
+	end
+	if opts.review_verifier_provider ~= nil then
+		ensure_scope("review").verifier = ensure_scope("review").verifier or {}
+		ensure_scope("review").verifier.provider = opts.review_verifier_provider
+	end
+	if opts.review_verifier_model_id ~= nil then
+		ensure_scope("review").verifier = ensure_scope("review").verifier or {}
+		ensure_scope("review").verifier.model_id = opts.review_verifier_model_id
 	end
 
 	if opts.commit_provider ~= nil then
@@ -106,6 +126,7 @@ function M.setup(opts)
 	vim.g.pitaco_model_id = opts.model_id
 	vim.g.pitaco_ollama_url = opts.ollama_url
 	vim.g.pitaco_ollama_options = type(opts.ollama_options) == "table" and vim.deepcopy(opts.ollama_options) or nil
+	vim.g.pitaco_ollama_keep_alive = opts.ollama_keep_alive
 	vim.g.pitaco_language = opts.language
 	vim.g.pitaco_commit_keymap = opts.commit_keymap
 	vim.g.pitaco_commit_system_prompt = opts.commit_system_prompt

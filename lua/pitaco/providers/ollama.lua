@@ -7,8 +7,34 @@ local response_utils = require("pitaco.providers.response_utils")
 
 M.name = "ollama"
 
+local function summarize_context_usage(body, request_data)
+	if type(body) ~= "table" then
+		return nil
+	end
+
+	local prompt_eval_count = tonumber(body.prompt_eval_count)
+	if prompt_eval_count == nil then
+		return nil
+	end
+
+	local num_ctx = nil
+	if type(request_data) == "table" and type(request_data.options) == "table" then
+		num_ctx = tonumber(request_data.options.num_ctx)
+	end
+
+	if num_ctx == nil or num_ctx <= 0 then
+		return ("ollama context usage: prompt_eval_count=%d"):format(prompt_eval_count)
+	end
+
+	local pct = (prompt_eval_count / num_ctx) * 100
+	return ("ollama context usage: %d/%d tokens (%.1f%%)"):format(prompt_eval_count, num_ctx, pct)
+end
+
 function M.get_model(scope)
 	local config = require("pitaco.config")
+	if scope == "review_verifier" then
+		return config.get_review_model("ollama", "verifier")
+	end
 	return config.get_model("ollama", scope)
 end
 
@@ -29,6 +55,11 @@ function M.build_chat_request(system_prompt, messages, max_tokens, scope)
 		model = model,
 		messages = final_messages,
 	}
+
+	local keep_alive = config.get_ollama_keep_alive(scope)
+	if keep_alive ~= nil then
+		request_table.keep_alive = keep_alive
+	end
 
 	local ollama_options = config.get_ollama_options(scope)
 	if type(ollama_options) == "table" then
@@ -90,6 +121,10 @@ function M.request(json_data, callback)
 					callback(nil, "Failed to decode response: " .. tostring(body))
 				else
 					log.debug_table("ollama decoded response", body, 500)
+					local usage_summary = summarize_context_usage(body, request_data)
+					if usage_summary ~= nil then
+						log.debug(usage_summary)
+					end
 					callback(body, nil)
 				end
 			end)

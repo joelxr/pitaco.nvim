@@ -85,9 +85,16 @@ function M.persist_feature_selection(scope, provider, model_id)
 
 	local state = M.load()
 	state.features = state.features or {}
-	state.features[scope] = state.features[scope] or {}
-	state.features[scope].provider = provider
-	state.features[scope].model_id = model_id
+	if scope == "review-verifier" then
+		state.features.review = state.features.review or {}
+		state.features.review.verifier = state.features.review.verifier or {}
+		state.features.review.verifier.provider = provider
+		state.features.review.verifier.model_id = model_id
+	else
+		state.features[scope] = state.features[scope] or {}
+		state.features[scope].provider = provider
+		state.features[scope].model_id = model_id
+	end
 	state.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
 	return M.save(state)
 end
@@ -99,7 +106,16 @@ function M.clear_feature_selection(scope)
 
 	local state = M.load()
 	if type(state.features) == "table" then
-		state.features[scope] = nil
+		if scope == "review-verifier" then
+			if type(state.features.review) == "table" then
+				state.features.review.verifier = nil
+				if next(state.features.review) == nil then
+					state.features.review = nil
+				end
+			end
+		else
+			state.features[scope] = nil
+		end
 		if next(state.features) == nil then
 			state.features = nil
 		end

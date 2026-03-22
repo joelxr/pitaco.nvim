@@ -9,6 +9,7 @@ local commit = require("pitaco.commit")
 local summary = require("pitaco.summary")
 local model_picker = require("pitaco.model_picker")
 local context_engine = require("pitaco.context_engine")
+local progress = require("pitaco.progress")
 local review_runtime = require("pitaco.review_runtime")
 local review_store = require("pitaco.review_store")
 local review_renderer = require("pitaco.review_renderer")
@@ -56,10 +57,14 @@ function M.review(mode)
 		return
 	end
 
-	local scope = "review"
-	local provider = provider_factory.create_provider(config.get_provider(scope), scope)
-	local request_bundle = provider.prepare_requests(fewshot.messages, review_mode)
-	requests.make_requests(namespace, provider, request_bundle)
+	progress.update("Preparing review context 1/1", 1, 1)
+	vim.cmd("redraw")
+	vim.schedule(function()
+		local scope = "review"
+		local provider = provider_factory.create_provider(config.get_provider(scope), scope)
+		local request_bundle = provider.prepare_requests(fewshot.messages, review_mode)
+		requests.make_requests(namespace, provider, request_bundle)
+	end)
 end
 
 function M.index()
@@ -201,6 +206,18 @@ function M.info()
 			lines,
 			("%s: %s / %s (%s)"):format(scope_label(normalized_scope), provider or "unknown", model_id or "unknown", note)
 		)
+
+		if normalized_scope == "review" then
+			local verifier_provider = config.get_review_provider("verifier")
+			local verifier_model_id = verifier_provider and config.get_review_model(verifier_provider, "verifier") or nil
+			table.insert(
+				lines,
+				("review-verifier: %s / %s"):format(
+					verifier_provider or "unknown",
+					verifier_model_id or "unknown"
+				)
+			)
+		end
 	end
 
 	append_scope(nil)

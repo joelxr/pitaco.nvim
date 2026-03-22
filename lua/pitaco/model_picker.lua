@@ -32,6 +32,9 @@ local function normalize_scope(scope)
 	if lowered == "default" or lowered == "base" or lowered == "global" then
 		return nil
 	end
+	if lowered == "review_verifier" or lowered == "review-verifier" then
+		return "review-verifier"
+	end
 
 	return trimmed
 end
@@ -42,8 +45,17 @@ end
 
 local function current_selection(scope)
 	local normalized_scope = normalize_scope(scope)
-	local provider = config.get_provider(normalized_scope)
-	local model_id = provider and config.get_model(provider, normalized_scope) or nil
+	local provider
+	local model_id
+
+	if normalized_scope == "review-verifier" then
+		provider = config.get_review_provider("verifier")
+		model_id = provider and config.get_review_model(provider, "verifier") or nil
+	else
+		provider = config.get_provider(normalized_scope)
+		model_id = provider and config.get_model(provider, normalized_scope) or nil
+	end
+
 	return normalized_scope, provider, model_id
 end
 
@@ -491,7 +503,16 @@ local function apply_selection(choice, scope)
 	local normalized_scope = normalize_scope(scope)
 	if normalized_scope ~= nil and choice.inherit_default then
 		local features = vim.deepcopy(vim.g.pitaco_features or {})
-		features[normalized_scope] = nil
+		if normalized_scope == "review-verifier" then
+			if type(features.review) == "table" then
+				features.review.verifier = nil
+				if next(features.review) == nil then
+					features.review = nil
+				end
+			end
+		else
+			features[normalized_scope] = nil
+		end
 		vim.g.pitaco_features = features
 
 		if vim.g.pitaco_persist_model_selection ~= false then
@@ -517,6 +538,13 @@ local function apply_selection(choice, scope)
 	if normalized_scope == nil then
 		vim.g.pitaco_provider = choice.provider
 		vim.g.pitaco_model_id = choice.model_id
+	elseif normalized_scope == "review-verifier" then
+		local features = vim.deepcopy(vim.g.pitaco_features or {})
+		features.review = features.review or {}
+		features.review.verifier = features.review.verifier or {}
+		features.review.verifier.provider = choice.provider
+		features.review.verifier.model_id = choice.model_id
+		vim.g.pitaco_features = features
 	else
 		local features = vim.deepcopy(vim.g.pitaco_features or {})
 		features[normalized_scope] = features[normalized_scope] or {}

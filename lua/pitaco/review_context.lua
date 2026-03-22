@@ -19,17 +19,28 @@ local GENERIC_SYMBOLS = {
 	["child"] = true,
 	["children"] = true,
 	["data"] = true,
+	["dataset"] = true,
 	["defaultparams"] = true,
-	["item"] = true,
-	["items"] = true,
-	["newitems"] = true,
 	["params"] = true,
 	["payload"] = true,
+	["proposal"] = true,
 	["query"] = true,
 	["result"] = true,
 	["results"] = true,
 	["update"] = true,
 	["value"] = true,
+}
+local GENERIC_SUFFIXES = {
+	"item",
+	"items",
+	"data",
+	"result",
+	"results",
+	"params",
+	"payload",
+	"query",
+	"value",
+	"update",
 }
 local GENERIC_TOKENS = {
 	["async"] = true,
@@ -107,6 +118,15 @@ local function is_high_signal_symbol(symbol)
 	local normalized = symbol:lower()
 	if #normalized < 4 then
 		return false
+	end
+
+	for _, suffix in ipairs(GENERIC_SUFFIXES) do
+		if normalized ~= suffix and vim.endswith(normalized, suffix) then
+			local prefix = normalized:sub(1, #normalized - #suffix)
+			if #prefix < 6 then
+				return false
+			end
+		end
 	end
 
 	return not GENERIC_SYMBOLS[normalized]
@@ -266,6 +286,38 @@ local function build_token_set(tokens)
 	return token_set
 end
 
+local function path_segments(path)
+	local segments = {}
+	for _, part in ipairs(vim.split(path or "", "/", { trimempty = true })) do
+		table.insert(segments, part)
+	end
+	return segments
+end
+
+local function shared_path_prefix_depth(left, right)
+	local left_segments = path_segments(left)
+	local right_segments = path_segments(right)
+	local depth = 0
+	local limit = math.min(#left_segments, #right_segments)
+
+	for index = 1, limit do
+		if left_segments[index] ~= right_segments[index] then
+			break
+		end
+		depth = depth + 1
+	end
+
+	return depth
+end
+
+local function best_changed_path_overlap(path, changed_files)
+	local best = 0
+	for changed_file in pairs(changed_files or {}) do
+		best = math.max(best, shared_path_prefix_depth(path, changed_file))
+	end
+	return best
+end
+
 local function score_diff_chunk(chunk, diff_tokens, diff_token_set, changed_files, changed_symbols)
 	if type(chunk) ~= "table" then
 		return nil
@@ -292,6 +344,11 @@ local function score_diff_chunk(chunk, diff_tokens, diff_token_set, changed_file
 		score = score + 3.5
 	end
 
+	local path_overlap = best_changed_path_overlap(chunk.file or "", changed_files)
+	if path_overlap >= 3 then
+		score = score + (path_overlap * 0.75)
+	end
+
 	for _, token in ipairs(diff_tokens or {}) do
 		if haystack:find(token, 1, true) ~= nil then
 			score = score + 0.35
@@ -307,6 +364,14 @@ local function score_diff_chunk(chunk, diff_tokens, diff_token_set, changed_file
 	end
 
 	if score <= 0 then
+		return nil
+	end
+
+	if path_overlap < 3 and not (type(chunk.symbol) == "string" and changed_symbols[chunk.symbol:lower()]) then
+		return nil
+	end
+
+	if score < 2.5 then
 		return nil
 	end
 
@@ -422,6 +487,67 @@ local function parse_match_line(line)
 	}
 end
 
+local function line_has_identifier(text, symbol)
+	if type(text) ~= "string" or type(symbol) ~= "string" or text == "" or symbol == "" then
+		return false
+	end
+
+	local pattern = "%f[%w_]" .. vim.pesc(symbol) .. "%f[^%w_]"
+	return text:match(pattern) ~= nil
+end
+
+local function is_probably_comment_line(text)
+	local trimmed = trim(text)
+	return trimmed:match("^//") ~= nil
+		or trimmed:match("^/%*") ~= nil
+		or trimmed:match("^%*") ~= nil
+		or trimmed:match("^#") ~= nil
+end
+
+local function is_self_symbol_match(symbol, match)
+	if not line_has_identifier(match.text, symbol) then
+		return false
+	end
+
+	local trimmed = trim(match.text)
+	local escaped_symbol = vim.pesc(symbol)
+	local patterns = {
+		("^const%s+%b{}%s*=%s*require%b()"),
+		"^const%s+" .. escaped_symbol .. "%s*=%s*",
+		"^function%s+" .. escaped_symbol .. "%s*%(",
+		"^async%s+function%s+" .. escaped_symbol .. "%s*%(",
+		("^module%.exports%s*=%s*%b{}"),
+	}
+
+	for _, pattern in ipairs(patterns) do
+		if trimmed:match(pattern) then
+			return true
+		end
+	end
+
+	return false
+end
+
+local function is_meaningful_symbol_match(symbol, match, definition_file)
+	if type(match) ~= "table" or type(match.text) ~= "string" then
+		return false
+	end
+
+	if not line_has_identifier(match.text, symbol) then
+		return false
+	end
+
+	if is_probably_comment_line(match.text) then
+		return false
+	end
+
+	if type(definition_file) == "string" and match.file == definition_file and is_self_symbol_match(symbol, match) then
+		return false
+	end
+
+	return true
+end
+
 local function read_snippet(root, relative_path, target_line)
 	local absolute_path = vim.fs.joinpath(root, relative_path)
 	local ok, file_lines = pcall(vim.fn.readfile, absolute_path)
@@ -441,7 +567,7 @@ local function read_snippet(root, relative_path, target_line)
 	return table.concat(snippet_lines, "\n")
 end
 
-local function collect_symbol_matches(root, symbol, changed_files, timeout)
+local function collect_symbol_matches(root, symbol, definition_file, changed_files, timeout)
 	local args = {
 		"--line-number",
 		"--column",
@@ -469,11 +595,13 @@ local function collect_symbol_matches(root, symbol, changed_files, timeout)
 		local match = parse_match_line(line)
 		if match ~= nil then
 			match.file = match.file:gsub("^%./", "")
-			match.snippet = read_snippet(root, match.file, match.line)
-			if changed_files[match.file] then
-				table.insert(internal, match)
-			else
-				table.insert(external, match)
+			if is_meaningful_symbol_match(symbol, match, definition_file) then
+				match.snippet = read_snippet(root, match.file, match.line)
+				if changed_files[match.file] then
+					table.insert(internal, match)
+				else
+					table.insert(external, match)
+				end
 			end
 		end
 	end
@@ -644,6 +772,7 @@ function M.collect(bufnr, review_mode)
 			local matches, error_message = collect_symbol_matches(
 				review_context.root,
 				entry.symbol,
+				entry.file,
 				changed_files,
 				1500
 			)

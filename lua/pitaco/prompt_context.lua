@@ -46,6 +46,13 @@ function M.build_project_summary(summary)
 	}, "\n")
 end
 
+function M.build_compact_project_summary(summary)
+	return table.concat({
+		("Repository: %s"):format(summary.repository_name or "unknown"),
+		("Languages: %s"):format(format_list(summary.languages)),
+	}, "\n")
+end
+
 function M.build_relevant_chunks(chunks)
 	local sections = {}
 	for _, chunk in ipairs(chunks) do
@@ -143,6 +150,123 @@ function M.build_changed_outline(outline_files)
 			("Changed lines: %s"):format(format_line_ranges(entry.changedLines)),
 			("Changed symbols: %s"):format(#symbols > 0 and table.concat(symbols, "; ") or "none"),
 		}, "\n"))
+	end
+
+	return table.concat(sections, "\n\n")
+end
+
+function M.build_compact_changed_outline(outline_files, opts)
+	if type(outline_files) ~= "table" or vim.tbl_isempty(outline_files) then
+		return "No compact syntax outline was retrieved for the changed files."
+	end
+
+	local max_files = opts and opts.max_files or 8
+	local max_symbols = opts and opts.max_symbols or 4
+	local sections = {}
+
+	for file_index, entry in ipairs(outline_files) do
+		if file_index > max_files then
+			break
+		end
+
+		local symbols = {}
+		for symbol_index, symbol in ipairs(entry.symbols or {}) do
+			if symbol_index > max_symbols then
+				break
+			end
+			table.insert(symbols, ("%s %s (%d-%d)"):format(
+				symbol.kind or "symbol",
+				symbol.symbol or "unknown",
+				tonumber(symbol.startLine) or 0,
+				tonumber(symbol.endLine) or 0
+			))
+		end
+
+		table.insert(sections, table.concat({
+			("File: %s"):format(entry.file or "unknown"),
+			("Changed lines: %s"):format(format_line_ranges(entry.changedLines)),
+			("Changed symbols: %s"):format(#symbols > 0 and table.concat(symbols, "; ") or "none"),
+		}, "\n"))
+	end
+
+	return table.concat(sections, "\n\n")
+end
+
+local function build_compact_match_group(label_line, matches, opts)
+	local max_matches = opts and opts.max_matches or 2
+	local max_chars = opts and opts.max_chars or 180
+	local sections = { label_line }
+
+	for index, match in ipairs(matches or {}) do
+		if index > max_matches then
+			break
+		end
+
+		local header = ("%s:%d"):format(match.file or "unknown", tonumber(match.line) or 0)
+		local body = M.truncate_text(match.text or match.snippet or "", max_chars)
+		table.insert(sections, header .. " " .. body)
+	end
+
+	return table.concat(sections, "\n")
+end
+
+function M.build_compact_symbol_usages(symbol_usages, opts)
+	if type(symbol_usages) ~= "table" or vim.tbl_isempty(symbol_usages) then
+		return "No likely downstream usages were retrieved for the changed symbols."
+	end
+
+	local max_groups = opts and opts.max_groups or 2
+	local sections = {}
+
+	for index, entry in ipairs(symbol_usages) do
+		if index > max_groups then
+			break
+		end
+		table.insert(sections, build_compact_match_group(
+			("Symbol: %s (%s)"):format(entry.symbol or "unknown", entry.definition_file or "unknown"),
+			entry.matches,
+			opts
+		))
+	end
+
+	return table.concat(sections, "\n\n")
+end
+
+function M.build_compact_file_consumers(file_consumers, opts)
+	if type(file_consumers) ~= "table" or vim.tbl_isempty(file_consumers) then
+		return "No likely direct consumers were retrieved for the changed files."
+	end
+
+	local max_groups = opts and opts.max_groups or 3
+	local sections = {}
+
+	for index, entry in ipairs(file_consumers) do
+		if index > max_groups then
+			break
+		end
+		table.insert(sections, build_compact_match_group(
+			("Changed file: %s"):format(entry.file or "unknown"),
+			entry.consumers,
+			opts
+		))
+	end
+
+	return table.concat(sections, "\n\n")
+end
+
+function M.build_compact_related_tests(related_tests, opts)
+	if type(related_tests) ~= "table" or vim.tbl_isempty(related_tests) then
+		return "No likely related tests were retrieved for the changed files or symbols."
+	end
+
+	local max_groups = opts and opts.max_groups or 2
+	local sections = {}
+
+	for index, entry in ipairs(related_tests) do
+		if index > max_groups then
+			break
+		end
+		table.insert(sections, build_compact_match_group(entry.label or "Related tests", entry.matches, opts))
 	end
 
 	return table.concat(sections, "\n\n")

@@ -91,8 +91,6 @@ local function emit_debug(message, persist_to_file)
 	if persist_to_file ~= false then
 		append_debug_entry("debug", "message", message)
 	end
-
-	schedule_log(vim.log.levels.DEBUG, "[debug] " .. message)
 end
 
 local function truncate(value, max_len)
@@ -150,6 +148,22 @@ function M.preview_text(label, value, max_len)
 
 	append_debug_entry("text", label, value)
 	emit_debug(label .. ": " .. truncate(value, max_len or 300), false)
+end
+
+function M.event(level_name, label, value, notify)
+	if is_enabled() then
+		append_debug_entry(level_name or "event", label, value)
+	end
+
+	if notify == true then
+		local level = vim.log.levels.INFO
+		if level_name == "warn" then
+			level = vim.log.levels.WARN
+		elseif level_name == "error" then
+			level = vim.log.levels.ERROR
+		end
+		schedule_log(level, normalize_text(value))
+	end
 end
 
 return M

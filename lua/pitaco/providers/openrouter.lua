@@ -21,6 +21,9 @@ end
 
 function M.get_model(scope)
 	local config = require("pitaco.config")
+	if scope == "review_verifier" then
+		return config.get_review_model("openrouter", "verifier")
+	end
 	return config.get_model("openrouter", scope)
 end
 

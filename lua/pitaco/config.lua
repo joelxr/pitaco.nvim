@@ -56,6 +56,32 @@ local function non_empty_string(value)
 	return type(value) == "string" and value ~= ""
 end
 
+local function get_review_role_overrides(role)
+	local overrides = get_feature_overrides("review")
+	if overrides == nil then
+		return nil
+	end
+
+	if role == "reviewer" then
+		return overrides
+	end
+
+	local nested = overrides[role]
+	if type(nested) == "table" then
+		return nested
+	end
+
+	return nil
+end
+
+local function get_ollama_scope_overrides(scope)
+	if scope == "review_verifier" then
+		return get_review_role_overrides("verifier")
+	end
+
+	return get_feature_overrides(scope)
+end
+
 local function scope_label(scope)
 	return normalize_scope(scope) or "default"
 end
@@ -126,10 +152,38 @@ Ignore retrieved matches that only share common words, generic variable names, f
 Do not infer new requirements or policies unless they are directly supported by the diff, a direct caller/callee relationship, or nearby tests shown in the prompt.
 Do not report a finding that contradicts the visible diff or shown code.
 Before claiming that a function name, import, argument list, or API usage is wrong, verify that claim against the actual diff and shown code snippets in the prompt.
+If the visible diff or shown code disproves a possible finding, omit it instead of hedging.
+When reviewing a diff slice, the changed hunk and focused file excerpt are primary evidence. Use broader repository context only to confirm impact, not to invent issues.
+Only report a finding when the shown evidence demonstrates a concrete failure mode in this codebase.
 Do not report multiple findings for the same root cause unless different changed files each contain their own concrete fault.
 Do not praise the code.
   ]]
 	return vim.g.pitaco_system_prompt or default_system_prompt
+end
+
+function M.get_review_verifier_system_prompt()
+	local default_review_verifier_system_prompt = [[
+You are a strict code review verifier.
+Evaluate whether the candidate is a real bug using only the shown evidence.
+Treat the candidate as a hypothesis, not as evidence.
+Be direct. Do not explain your reasoning.
+
+Return exactly one of these formats:
+status=confirmed
+finding=file=<repo-relative-path> line=<num>: <concise issue and proposed solution>
+
+status=rejected
+
+status=insufficient_evidence
+
+Use `status=confirmed` only for a proven defect.
+Use `status=rejected` when the evidence shows there is no bug, or the candidate is docs/style/naming/test-gap feedback.
+Use `status=insufficient_evidence` when the claim is plausible but not proven by the shown code and diff.
+If the shown code or diff directly contradicts the candidate, return `status=rejected`.
+If the candidate only describes correct or intentional code, return `status=rejected`.
+Do not add explanations, headings, numbering, bullets, markdown, or any text before or after those lines.
+]]
+	return vim.g.pitaco_review_verifier_system_prompt or default_review_verifier_system_prompt
 end
 
 function M.get_commit_system_prompt()
@@ -285,14 +339,37 @@ function M.get_provider(scope)
 	return vim.g.pitaco_provider
 end
 
+function M.get_review_provider(role)
+	role = role == "verifier" and "verifier" or "reviewer"
+	local overrides = get_review_role_overrides(role)
+	if overrides ~= nil and non_empty_string(overrides.provider) then
+		return overrides.provider
+	end
+
+	if role == "verifier" then
+		return M.get_review_provider("reviewer")
+	end
+
+	return M.get_provider("review")
+end
+
 function M.get_ollama_options(scope)
 	local base = type(vim.g.pitaco_ollama_options) == "table" and vim.deepcopy(vim.g.pitaco_ollama_options) or {}
-	local overrides = get_feature_overrides(scope)
+	local overrides = get_ollama_scope_overrides(scope)
 	if overrides ~= nil and type(overrides.ollama_options) == "table" then
 		base = vim.tbl_deep_extend("force", base, overrides.ollama_options)
 	end
 
 	return next(base) ~= nil and base or nil
+end
+
+function M.get_ollama_keep_alive(scope)
+	local overrides = get_ollama_scope_overrides(scope)
+	if overrides ~= nil and overrides.ollama_keep_alive ~= nil then
+		return overrides.ollama_keep_alive
+	end
+
+	return vim.g.pitaco_ollama_keep_alive
 end
 
 function M.get_debug_log_path()
@@ -370,6 +447,24 @@ function M.get_model(provider, scope)
 	end
 
 	return nil
+end
+
+function M.get_review_model(provider, role)
+	role = role == "verifier" and "verifier" or "reviewer"
+	local overrides = get_review_role_overrides(role)
+	if overrides ~= nil and non_empty_string(overrides.model_id) then
+		return overrides.model_id
+	end
+
+	if role == "verifier" then
+		local reviewer_provider = M.get_review_provider("reviewer")
+		if provider == reviewer_provider then
+			return M.get_review_model(provider, "reviewer")
+		end
+		return M.get_model(provider, "review_verifier")
+	end
+
+	return M.get_model(provider, "review")
 end
 
 function M.get_ollama_url()

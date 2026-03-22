@@ -94,7 +94,7 @@ end, {
 
 		local line = vim.fn.getcmdline()
 		if line:match("^%s*Pitaco%s+models%s+") then
-			local scopes = { "default" }
+			local scopes = { "default", "review-verifier" }
 			for _, scope in ipairs(config.list_feature_scopes()) do
 				table.insert(scopes, scope)
 			end

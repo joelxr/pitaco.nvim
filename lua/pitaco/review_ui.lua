@@ -390,7 +390,7 @@ local function activate_entry(bufnr, close_after)
 		if target_win ~= nil and vim.api.nvim_win_is_valid(target_win) then
 			vim.api.nvim_set_current_win(target_win)
 		end
-		vim.notify("Pitaco review activated", vim.log.levels.INFO)
+		require("pitaco.log").event("info", "review activated", "Pitaco review activated", false)
 		return
 	end
 
