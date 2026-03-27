@@ -12,6 +12,7 @@ const parserByLanguage = {
   python: Python,
   typescript: TypeScript.typescript,
 };
+const parserCache = new Map();
 
 const chunkNodeTypes = {
   go: new Set(["function_declaration", "method_declaration", "type_declaration"]),
@@ -102,14 +103,28 @@ function lexicalChunks(node, source) {
   }];
 }
 
-export function parseFile(language, source) {
+function getParser(language) {
+  if (parserCache.has(language)) {
+    return parserCache.get(language);
+  }
+
   const parserLanguage = parserByLanguage[language];
   if (!parserLanguage) {
-    return { imports: [], exports: [], chunks: [] };
+    return null;
   }
 
   const parser = new Parser();
   parser.setLanguage(parserLanguage);
+  parserCache.set(language, parser);
+  return parser;
+}
+
+export function parseFile(language, source) {
+  const parser = getParser(language);
+  if (!parser) {
+    return { imports: [], exports: [], chunks: [] };
+  }
+
   const tree = parser.parse(source);
   const root = tree.rootNode;
   const imports = [];

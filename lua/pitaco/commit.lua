@@ -87,6 +87,15 @@ local function build_commit_parse_error(response)
 	return "failed to parse commit message"
 end
 
+local function commit_progress_message(provider_name, model_id, attempt, total_attempts)
+	return ("Generating commit message %d/%d with %s/%s"):format(
+		attempt or 0,
+		total_attempts or 0,
+		provider_name or "unknown",
+		model_id or "unknown"
+	)
+end
+
 local function set_preview_keymaps(buf, win)
 	vim.keymap.set("n", "q", function()
 		if vim.api.nvim_win_is_valid(win) then
@@ -281,6 +290,8 @@ end
 function M.run()
 	local scope = "commit"
 	local provider = provider_factory.create_provider(config.get_provider(scope), scope)
+	local provider_name = provider.name
+	local model_id = provider.get_model and provider.get_model() or nil
 
 	local root_lines, root_code = git_systemlist({ "git", "rev-parse", "--show-toplevel" })
 	if root_code ~= 0 or #root_lines == 0 then
@@ -334,7 +345,11 @@ function M.run()
 	local commit_token_attempts = { 256, 512 }
 	local function request_commit_message(attempt)
 		local max_tokens = commit_token_attempts[attempt] or commit_token_attempts[#commit_token_attempts]
-		progress.update("Generating commit message", attempt, #commit_token_attempts)
+		progress.update(
+			commit_progress_message(provider_name, model_id, attempt, #commit_token_attempts),
+			attempt,
+			#commit_token_attempts
+		)
 		local request_json = provider.build_chat_request(system_prompt, messages, max_tokens)
 		log.debug(("Dispatching commit request via provider '%s'"):format(provider.name or "unknown"))
 		log.preview_json("commit request payload", request_json)

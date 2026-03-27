@@ -20,6 +20,19 @@ local DEFAULT_PROMPT_DIFF_EXCLUDE_FILES = {
 	"Podfile.lock",
 }
 
+local DEFAULT_AUTO_INDEX_PROJECT_MARKERS = {
+	".git",
+	"package.json",
+	"pyproject.toml",
+	"go.mod",
+	"Cargo.toml",
+	"composer.json",
+	"Gemfile",
+	"mix.exs",
+	"deno.json",
+	"deno.jsonc",
+}
+
 local BUILTIN_FEATURE_SCOPES = {
 	review = true,
 	commit = true,
@@ -403,6 +416,31 @@ end
 
 function M.should_include_git_diff()
 	return vim.g.pitaco_context_include_git_diff ~= false
+end
+
+function M.should_auto_index_on_project_open()
+	return vim.g.pitaco_auto_index_on_project_open == true
+end
+
+function M.get_auto_index_debounce_ms()
+	local value = tonumber(vim.g.pitaco_auto_index_debounce_ms)
+	if value == nil or value < 0 then
+		return 800
+	end
+	return math.floor(value)
+end
+
+function M.get_auto_index_project_markers()
+	local configured = vim.g.pitaco_auto_index_project_markers
+	if configured == false then
+		return {}
+	end
+
+	if type(configured) == "table" then
+		return vim.deepcopy(configured)
+	end
+
+	return vim.deepcopy(DEFAULT_AUTO_INDEX_PROJECT_MARKERS)
 end
 
 function M.get_prompt_diff_exclude_files()

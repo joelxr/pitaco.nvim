@@ -7,7 +7,7 @@
     "pitaco-indexer": "./src/cli.js"
   },
   "scripts": {
-    "check": "node --check src/cli.js && node --check src/indexer.js && node --check src/parser.js && node --check src/embeddings.js && node --check src/store.js"
+    "check": "node --check src/cli.js && node --check src/indexer.js && node --check src/parser.js && node --check src/parse_worker.js && node --check src/embeddings.js && node --check src/store.js"
   },
   "dependencies": {
     "@tree-sitter-grammars/tree-sitter-lua": "^0.2.0",

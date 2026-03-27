@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 export const IGNORED_DIRECTORIES = new Set([
@@ -44,8 +45,11 @@ export function getIndexPaths(root) {
     baseDir,
     indexDir,
     configPath: path.join(baseDir, "config.json"),
+    lockPath: path.join(indexDir, "index.lock"),
+    statusPath: path.join(indexDir, "index.status.json"),
     manifestPath: path.join(indexDir, "manifest.json"),
     chunksPath: path.join(indexDir, "chunks.json"),
+    embeddingsPath: path.join(indexDir, "embeddings.json"),
     summaryPath: path.join(indexDir, "summary.json"),
   };
 }
@@ -75,6 +79,22 @@ function defaultEmbeddingConfig() {
   return { provider: "mock", model: "hash-256" };
 }
 
+function defaultParseConcurrency() {
+  const parallelism = typeof os.availableParallelism === "function"
+    ? os.availableParallelism()
+    : ((os.cpus() || []).length || 1);
+  return Math.max(1, Math.min(4, parallelism));
+}
+
+function positiveInteger(value, fallback) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 1) {
+    return fallback;
+  }
+
+  return Math.floor(numeric);
+}
+
 export function loadContextConfig(root) {
   const { configPath } = getIndexPaths(root);
   const fileConfig = readJson(configPath) ?? {};
@@ -93,5 +113,11 @@ export function loadContextConfig(root) {
       ...(fileConfig.search ?? {}),
     },
     embedding,
+    indexing: {
+      parseConcurrency: positiveInteger(
+        process.env.PITACO_INDEX_PARSE_CONCURRENCY ?? fileConfig.indexing?.parseConcurrency,
+        defaultParseConcurrency(),
+      ),
+    },
   };
 }

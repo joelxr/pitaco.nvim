@@ -10,6 +10,25 @@ local review_verifier = require("pitaco.review_verifier")
 
 local M = {}
 
+local function run_on_main_loop(fn)
+	if vim.in_fast_event() then
+		vim.schedule(fn)
+		return
+	end
+
+	fn()
+end
+
+local function dispatch_provider_request(provider, request_json, callback)
+	run_on_main_loop(function()
+		provider.request(request_json, function(response, error_message)
+			run_on_main_loop(function()
+				callback(response, error_message)
+			end)
+		end)
+	end)
+end
+
 local function progress_message(metadata, current_request, total_requests)
 	local provider = metadata.provider or "unknown"
 	local model_id = metadata.model_id or "unknown"
@@ -298,7 +317,7 @@ function M.make_requests(namespace, provider, request_bundle)
 			log.preview_json("verifier request payload", request_json)
 			progress.update(verifier_progress_message(metadata, candidate_index, total_candidates), candidate_index, total_candidates)
 
-			verifier_provider.request(request_json, function(response, error_message)
+			dispatch_provider_request(verifier_provider, request_json, function(response, error_message)
 				if error_message ~= nil then
 					log.preview_text("verifier request error", error_message)
 					verify_next()
@@ -434,7 +453,7 @@ function M.make_requests(namespace, provider, request_bundle)
 
 		progress.update(progress_message(metadata, request_index, starting_request_count), request_index, starting_request_count)
 
-		provider.request(request_json, function(response, error_message)
+		dispatch_provider_request(provider, request_json, function(response, error_message)
 			if error_message ~= nil then
 				log.preview_text("analysis request error", error_message)
 				log.event("error", "analysis request failure", error_message, false)

@@ -22,6 +22,9 @@ local default_opts = {
 	context_max_chunks = 6,
 	context_timeout_ms = 1500,
 	context_include_git_diff = true,
+	auto_index_on_project_open = false,
+	auto_index_debounce_ms = 800,
+	auto_index_project_markers = nil,
 	prompt_diff_exclude_files = nil,
 	debug = false,
 	debug_log_path = nil,
@@ -136,6 +139,11 @@ function M.setup(opts)
 	vim.g.pitaco_context_max_chunks = opts.context_max_chunks
 	vim.g.pitaco_context_timeout_ms = opts.context_timeout_ms
 	vim.g.pitaco_context_include_git_diff = opts.context_include_git_diff
+	vim.g.pitaco_auto_index_on_project_open = opts.auto_index_on_project_open
+	vim.g.pitaco_auto_index_debounce_ms = opts.auto_index_debounce_ms
+	vim.g.pitaco_auto_index_project_markers = type(opts.auto_index_project_markers) == "table"
+			and vim.deepcopy(opts.auto_index_project_markers)
+		or opts.auto_index_project_markers
 	vim.g.pitaco_prompt_diff_exclude_files = type(opts.prompt_diff_exclude_files) == "table"
 			and vim.deepcopy(opts.prompt_diff_exclude_files)
 		or opts.prompt_diff_exclude_files
@@ -150,6 +158,13 @@ function M.setup(opts)
 		group = group,
 		callback = function(args)
 			review_renderer.render_buffer(args.buf)
+		end,
+	})
+
+	vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
+		group = group,
+		callback = function(args)
+			require("pitaco.context_engine").maybe_auto_index(args.buf)
 		end,
 	})
 end

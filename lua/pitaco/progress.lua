@@ -8,6 +8,23 @@ local progress_state = {
 	message = "",
 }
 
+local function emit_user_autocmd(pattern, data)
+	local opts = {
+		pattern = pattern,
+		modeline = false,
+		data = data,
+	}
+
+	if vim.in_fast_event() then
+		vim.schedule(function()
+			vim.api.nvim_exec_autocmds("User", opts)
+		end)
+		return
+	end
+
+	vim.api.nvim_exec_autocmds("User", opts)
+end
+
 function M.stop()
 	progress_state.running = false
 	progress_state.percentage = nil
@@ -15,10 +32,7 @@ function M.stop()
 	progress_state.total_requests = 0
 	progress_state.message = ""
 
-	vim.api.nvim_exec_autocmds("User", {
-		pattern = "PitacoProgressStop",
-		modeline = false,
-	})
+	emit_user_autocmd("PitacoProgressStop")
 end
 
 function M.update(message, current_request, total_requests)
@@ -28,16 +42,12 @@ function M.update(message, current_request, total_requests)
 	progress_state.total_requests = total_requests
 	progress_state.message = message
 
-	vim.api.nvim_exec_autocmds("User", {
-		pattern = "PitacoProgressUpdate",
-		modeline = false,
-		data = {
-			message = message,
-			current_request = current_request,
-			total_requests = total_requests,
-			percentage = nil,
-			running = progress_state.running,
-		},
+	emit_user_autocmd("PitacoProgressUpdate", {
+		message = message,
+		current_request = current_request,
+		total_requests = total_requests,
+		percentage = nil,
+		running = progress_state.running,
 	})
 end
 

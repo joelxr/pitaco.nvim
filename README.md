@@ -147,6 +147,15 @@ Keep the summary concise and ready to paste into GitHub.
     context_max_chunks = 6,
     context_timeout_ms = 1500,
     context_include_git_diff = true,
+    auto_index_on_project_open = false, -- Auto-run :Pitaco index once per project per session
+    auto_index_debounce_ms = 800, -- Wait briefly before auto-indexing a detected project
+    auto_index_project_markers = {
+        ".git",
+        "package.json",
+        "pyproject.toml",
+        "go.mod",
+        "Cargo.toml",
+    },
     prompt_diff_exclude_files = {
         "package-lock.json",
         "yarn.lock",
@@ -166,6 +175,10 @@ You can temporarily override it during the current Neovim session with:
 `features.summary.additional_instruction` is appended to PR summary requests.
 `ollama_options` is merged into Ollama chat requests as the `options` payload.
 `features.<scope>.ollama_options` overrides or extends the base `ollama_options` for that scope.
+`auto_index_on_project_open = true` makes Pitaco start indexing automatically when you open a buffer inside a detected project.
+`auto_index_debounce_ms` delays that automatic run so opening several buffers during startup does not immediately spawn duplicate indexing work.
+Auto-index is disabled by default and runs only once per project root in a Neovim session.
+Project detection uses `vim.fs.find(..., { upward = true })` against `auto_index_project_markers`, so single standalone files without a project marker will not trigger indexing.
 `prompt_diff_exclude_files` removes matching files from AI-bound git diffs used by `:Pitaco review diff`, `:Pitaco summary`, and `:Pitaco commit`.
 By default Pitaco excludes common lockfiles such as `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, and `Cargo.lock`.
 Set `prompt_diff_exclude_files = false` to disable the filter, or pass your own list of repo-relative paths/basenames to override it.
@@ -308,6 +321,9 @@ Optional indexer configuration lives at `.repo-pitaco/config.json`:
     "provider": "ollama",
     "model": "nomic-embed-text",
     "baseUrl": "http://localhost:11434"
+  },
+  "indexing": {
+    "parseConcurrency": 4
   },
   "search": {
     "limit": 6

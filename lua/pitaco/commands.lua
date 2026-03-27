@@ -51,17 +51,25 @@ local function normalize_review_mode(mode)
 	return nil
 end
 
+local function review_context_progress_message(provider_name, model_id)
+	return ("Preparing review context with %s/%s"):format(provider_name or "unknown", model_id or "unknown")
+end
+
 function M.review(mode)
 	local review_mode = normalize_review_mode(mode)
 	if review_mode == nil then
 		return
 	end
 
-	progress.update("Preparing review context 1/1", 1, 1)
+	local scope = "review"
+	local provider = provider_factory.create_provider(config.get_provider(scope), scope)
+	progress.update(
+		review_context_progress_message(provider.name, provider.get_model and provider.get_model() or nil),
+		1,
+		1
+	)
 	vim.cmd("redraw")
 	vim.schedule(function()
-		local scope = "review"
-		local provider = provider_factory.create_provider(config.get_provider(scope), scope)
 		local request_bundle = provider.prepare_requests(fewshot.messages, review_mode)
 		requests.make_requests(namespace, provider, request_bundle)
 	end)

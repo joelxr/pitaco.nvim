@@ -1,9 +1,14 @@
 local Job = require("plenary.job")
 local config = require("pitaco.config")
 local log = require("pitaco.log")
+local progress = require("pitaco.progress")
 
 local M = {}
 local MAX_OUTLINE_FILES = 8
+local auto_indexed_roots = {}
+local auto_index_timers = {}
+local external_index_watchers = {}
+local external_index_notifications = {}
 
 local function join_lines(lines)
 	if type(lines) ~= "table" or vim.tbl_isempty(lines) then
@@ -37,6 +42,163 @@ local function to_repo_relative_path(root, absolute_path)
 	end
 
 	return vim.fn.fnamemodify(normalized_path, ":.")
+end
+
+local function read_json_file(path)
+	if type(path) ~= "string" or path == "" then
+		return nil
+	end
+
+	local fd = vim.loop.fs_open(path, "r", 384)
+	if fd == nil then
+		return nil
+	end
+
+	local stat = vim.loop.fs_fstat(fd)
+	if stat == nil or stat.size == nil then
+		vim.loop.fs_close(fd)
+		return nil
+	end
+
+	local data = vim.loop.fs_read(fd, stat.size, 0)
+	vim.loop.fs_close(fd)
+	if type(data) ~= "string" or data == "" then
+		return nil
+	end
+
+	local ok, decoded = pcall(vim.json.decode, data)
+	if not ok or type(decoded) ~= "table" then
+		return nil
+	end
+
+	return decoded
+end
+
+local function process_is_alive(pid)
+	pid = tonumber(pid)
+	if pid == nil or pid <= 0 then
+		return false
+	end
+
+	local ok, err = pcall(vim.loop.kill, pid, 0)
+	if ok then
+		return true
+	end
+
+	return type(err) == "string" and err:match("EPERM") ~= nil
+end
+
+local function index_paths(root)
+	root = normalize_path(root)
+	if root == nil then
+		return nil
+	end
+
+	local index_dir = vim.fs.joinpath(root, ".repo-pitaco", "index")
+	return {
+		index_dir = index_dir,
+		lock_path = vim.fs.joinpath(index_dir, "index.lock"),
+		status_path = vim.fs.joinpath(index_dir, "index.status.json"),
+	}
+end
+
+local function stop_external_index_watcher(root)
+	local watcher = external_index_watchers[root]
+	if watcher == nil then
+		return
+	end
+
+	watcher:stop()
+	watcher:close()
+	external_index_watchers[root] = nil
+end
+
+local function notify_external_index_running(root)
+	if external_index_notifications[root] then
+		return
+	end
+
+	external_index_notifications[root] = true
+	vim.notify("Pitaco index already running in another session", vim.log.levels.INFO)
+end
+
+local function clear_external_index_notification(root)
+	external_index_notifications[root] = nil
+end
+
+local function update_progress_from_status(status)
+	progress.update(
+		status.message or "Indexing repository",
+		tonumber(status.current) or 0,
+		tonumber(status.total) or 1
+	)
+end
+
+local function index_complete_message(indexed_files, total_chunks)
+	indexed_files = tonumber(indexed_files) or 0
+	total_chunks = tonumber(total_chunks) or 0
+	return ("Pitaco indexed %d/%d files and %d chunks"):format(indexed_files, indexed_files, total_chunks)
+end
+
+local function attach_external_index(root, status_path, pid)
+	root = normalize_path(root)
+	status_path = status_path or (index_paths(root) and index_paths(root).status_path) or nil
+	if root == nil or status_path == nil then
+		return false
+	end
+
+	stop_external_index_watcher(root)
+	notify_external_index_running(root)
+
+	local function handle_status(status, lock_alive)
+		if type(status) ~= "table" then
+			if lock_alive then
+				progress.update("Indexing repository", 0, 1)
+			end
+			return
+		end
+
+		if status.result == "failed" then
+			progress.stop()
+			stop_external_index_watcher(root)
+			clear_external_index_notification(root)
+			vim.notify("Pitaco indexing failed: " .. (status.error or status.message or "unknown error"), vim.log.levels.ERROR)
+			return
+		end
+
+		if status.result == "completed" and not lock_alive then
+			progress.stop()
+			stop_external_index_watcher(root)
+			clear_external_index_notification(root)
+			vim.notify(index_complete_message(status.indexed_files or status.current, status.total_chunks), vim.log.levels.INFO)
+			return
+		end
+
+		update_progress_from_status(status)
+	end
+
+	local function poll()
+		local alive = process_is_alive(pid)
+		local status = read_json_file(status_path)
+
+		if not alive and status == nil then
+			progress.stop()
+			stop_external_index_watcher(root)
+			clear_external_index_notification(root)
+			return
+		end
+
+		handle_status(status, alive)
+	end
+
+	poll()
+
+	local timer = vim.loop.new_timer()
+	external_index_watchers[root] = timer
+	timer:start(500, 500, vim.schedule_wrap(function()
+		poll()
+	end))
+	return true
 end
 
 local function get_command_parts()
@@ -637,8 +799,15 @@ function M.collect_review_context(bufnr, review_mode)
 end
 
 function M.index()
+	return M.index_root(nil)
+end
+
+function M.index_root(root, opts)
+	opts = opts or {}
 	local current = vim.api.nvim_buf_get_name(0)
-	local root = M.find_repo_root(current ~= "" and current or vim.fn.getcwd())
+	root = normalize_path(root) or M.find_repo_root(current ~= "" and current or vim.fn.getcwd())
+	clear_external_index_notification(root)
+	stop_external_index_watcher(root)
 	local executable, base_args = get_command_parts()
 	executable = resolve_executable(executable)
 	local args = vim.deepcopy(base_args)
@@ -647,25 +816,84 @@ function M.index()
 	table.insert(args, "--root")
 	table.insert(args, root)
 	table.insert(args, "--json")
+	table.insert(args, "--progress")
 
 	if type(executable) ~= "string" or executable == "" then
+		if opts.session_key ~= nil then
+			auto_indexed_roots[opts.session_key] = nil
+		end
 		vim.notify("Pitaco context CLI command is not configured", vim.log.levels.ERROR)
 		return
 	end
 
 	if vim.fn.executable(executable) ~= 1 then
+		if opts.session_key ~= nil then
+			auto_indexed_roots[opts.session_key] = nil
+		end
 		vim.notify("Pitaco context CLI executable not found: " .. executable, vim.log.levels.ERROR)
 		return
+	end
+
+	local stderr_lines = {}
+	local active_lock = nil
+
+	local function update_index_progress(line)
+		if type(line) ~= "string" or line == "" then
+			return
+		end
+
+		local ok, payload = pcall(vim.json.decode, line)
+		if not ok or type(payload) ~= "table" then
+			table.insert(stderr_lines, line)
+			return
+		end
+
+		if payload.kind == "lock" and payload.status == "active" then
+			active_lock = payload
+			return
+		end
+
+		if payload.kind ~= "progress" then
+			table.insert(stderr_lines, line)
+			return
+		end
+
+		update_progress_from_status(payload)
 	end
 
 	local job = Job:new({
 		command = executable,
 		args = args,
 		cwd = root,
+		on_stderr = function(_, line)
+			vim.schedule(function()
+				update_index_progress(line)
+			end)
+		end,
 		on_exit = function(job, code)
 			vim.schedule(function()
+				if active_lock ~= nil then
+					if opts.session_key ~= nil then
+						auto_indexed_roots[opts.session_key] = true
+					end
+					local attached = attach_external_index(root, active_lock.status_path, active_lock.pid)
+					if not attached then
+						progress.stop()
+						vim.notify("Pitaco index already running in another session", vim.log.levels.INFO)
+					end
+					return
+				end
+
+				progress.stop()
+
 				if code ~= 0 then
-					local message = join_lines(job:stderr_result())
+					if opts.session_key ~= nil then
+						auto_indexed_roots[opts.session_key] = nil
+					end
+					local message = join_lines(stderr_lines)
+					if message == "" then
+						message = join_lines(job:stderr_result())
+					end
 					if message == "" then
 						message = join_lines(job:result())
 					end
@@ -680,21 +908,117 @@ function M.index()
 					return
 				end
 
-				vim.notify(
-					("Pitaco indexed %d files and %d chunks"):format(decoded.indexed_files or 0, decoded.total_chunks or 0),
-					vim.log.levels.INFO
-				)
+				vim.notify(index_complete_message(decoded.indexed_files, decoded.total_chunks), vim.log.levels.INFO)
 			end)
 		end,
 	})
 
 	local ok, error_message = pcall(job.start, job)
 	if not ok then
+		if opts.session_key ~= nil then
+			auto_indexed_roots[opts.session_key] = nil
+		end
 		vim.notify("Pitaco indexing failed to start: " .. tostring(error_message), vim.log.levels.ERROR)
 		return
 	end
 
-	vim.notify("Pitaco indexing started for " .. root, vim.log.levels.INFO)
+	progress.update("Scanning repository", 0, 1)
+	if opts.notify_start ~= false then
+		vim.notify("Pitaco indexing started for " .. root, vim.log.levels.INFO)
+	end
+end
+
+local function has_project_marker(path)
+	local markers = config.get_auto_index_project_markers()
+	if vim.tbl_isempty(markers) then
+		return nil
+	end
+
+	local found = vim.fs.find(markers, {
+		path = path,
+		upward = true,
+		stop = vim.loop.os_homedir(),
+		type = "file",
+		limit = 1,
+	})
+	if #found > 0 then
+		return vim.fn.fnamemodify(found[1], ":h")
+	end
+
+	found = vim.fs.find(markers, {
+		path = path,
+		upward = true,
+		stop = vim.loop.os_homedir(),
+		type = "directory",
+		limit = 1,
+	})
+	if #found > 0 then
+		return found[1]
+	end
+
+	return nil
+end
+
+local function stop_auto_index_timer(root)
+	local timer = auto_index_timers[root]
+	if timer == nil then
+		return
+	end
+
+	timer:stop()
+	timer:close()
+	auto_index_timers[root] = nil
+end
+
+function M.maybe_auto_index(bufnr)
+	if not config.should_auto_index_on_project_open() then
+		return
+	end
+
+	bufnr = bufnr or 0
+	if not vim.api.nvim_buf_is_valid(bufnr) then
+		return
+	end
+
+	if vim.bo[bufnr].buftype ~= "" then
+		return
+	end
+
+	local path = vim.api.nvim_buf_get_name(bufnr)
+	if type(path) ~= "string" or path == "" then
+		return
+	end
+
+	local absolute_path = normalize_path(path)
+	if absolute_path == nil then
+		return
+	end
+
+	local search_path = vim.fn.isdirectory(absolute_path) == 1 and absolute_path or vim.fn.fnamemodify(absolute_path, ":h")
+	local root = normalize_path(has_project_marker(search_path))
+	if root == nil or root == "" then
+		return
+	end
+
+	if auto_indexed_roots[root] then
+		return
+	end
+
+	stop_auto_index_timer(root)
+	local debounce_ms = config.get_auto_index_debounce_ms()
+	local timer = vim.loop.new_timer()
+	auto_index_timers[root] = timer
+	timer:start(debounce_ms, 0, vim.schedule_wrap(function()
+		stop_auto_index_timer(root)
+		if auto_indexed_roots[root] then
+			return
+		end
+		auto_indexed_roots[root] = true
+		M.index_root(root, {
+			notify_start = false,
+			session_key = root,
+		})
+	end))
 end
 
 return M

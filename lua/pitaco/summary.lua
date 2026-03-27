@@ -159,6 +159,10 @@ local function open_summary_modal(text, provider_name, model_id)
 	return buf, win
 end
 
+local function summary_progress_message(provider_name, model_id)
+	return ("Generating PR summary with %s/%s"):format(provider_name or "unknown", model_id or "unknown")
+end
+
 function M.run()
 	local scope = "summary"
 	local provider = provider_factory.create_provider(config.get_provider(scope), scope)
@@ -189,7 +193,7 @@ function M.run()
 	local provider_name = provider.name
 	local model_id = provider.get_model and provider.get_model() or nil
 
-	progress.update("Generating PR summary", 1, 1)
+	progress.update(summary_progress_message(provider_name, model_id), 1, 1)
 	log.debug(("Dispatching summary request via provider '%s'"):format(provider_name or "unknown"))
 	log.preview_json("summary request payload", request_json)
 

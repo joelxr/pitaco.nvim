@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 
 const MOCK_DIMENSIONS = 256;
+const DEFAULT_BATCH_SIZE = 64;
+const DEFAULT_CONCURRENCY = 4;
 
 function chunkArray(items, size) {
   const result = [];
@@ -90,6 +92,20 @@ async function embedWithOllama(config, texts) {
   return json.embeddings;
 }
 
+async function embedBatch(provider, embeddingConfig, batch) {
+  if (provider === "openai") {
+    return embedWithOpenAI(embeddingConfig, batch);
+  }
+  if (provider === "openrouter") {
+    return embedWithOpenRouter(embeddingConfig, batch);
+  }
+  if (provider === "ollama") {
+    return embedWithOllama(embeddingConfig, batch);
+  }
+
+  throw new Error(`Unsupported embedding provider: ${provider}`);
+}
+
 export async function embedTexts(texts, embeddingConfig) {
   if (!texts.length) {
     return { vectors: [], engine: "none" };
@@ -104,23 +120,28 @@ export async function embedTexts(texts, embeddingConfig) {
   }
 
   try {
-    const batches = chunkArray(texts, 64);
-    const vectors = [];
+    const batchSize = Math.max(1, Number(embeddingConfig.batchSize) || DEFAULT_BATCH_SIZE);
+    const concurrency = Math.max(1, Number(embeddingConfig.concurrency) || DEFAULT_CONCURRENCY);
+    const batches = chunkArray(texts, batchSize);
+    const batchVectors = new Array(batches.length);
+    let nextBatchIndex = 0;
 
-    for (const batch of batches) {
-      let embeddings;
-      if (provider === "openai") {
-        embeddings = await embedWithOpenAI(embeddingConfig, batch);
-      } else if (provider === "openrouter") {
-        embeddings = await embedWithOpenRouter(embeddingConfig, batch);
-      } else if (provider === "ollama") {
-        embeddings = await embedWithOllama(embeddingConfig, batch);
-      } else {
-        throw new Error(`Unsupported embedding provider: ${provider}`);
+    async function worker() {
+      while (nextBatchIndex < batches.length) {
+        const batchIndex = nextBatchIndex;
+        nextBatchIndex += 1;
+        const embeddings = await embedBatch(provider, embeddingConfig, batches[batchIndex]);
+        batchVectors[batchIndex] = embeddings.map(normalize);
       }
+    }
 
-      for (const vector of embeddings) {
-        vectors.push(normalize(vector));
+    const workerCount = Math.min(concurrency, batches.length);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+    const vectors = [];
+    for (const embeddings of batchVectors) {
+      for (const vector of embeddings || []) {
+        vectors.push(vector);
       }
     }
 

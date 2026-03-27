@@ -25,6 +25,7 @@ export function loadStore(root) {
     paths,
     manifest: readJson(paths.manifestPath, { version: 1, files: {} }),
     chunks: readJson(paths.chunksPath, []),
+    embeddings: readJson(paths.embeddingsPath, { version: 1, items: {} }),
     summary: readJson(paths.summaryPath, {}),
   };
 }
@@ -35,6 +36,7 @@ export function saveStore(root, store) {
   ensureDir(paths.indexDir);
   writeJson(paths.manifestPath, store.manifest);
   writeJson(paths.chunksPath, store.chunks);
+  writeJson(paths.embeddingsPath, store.embeddings);
   writeJson(paths.summaryPath, store.summary);
 }
 
