@@ -30,26 +30,56 @@ local function parse_prefix(line)
 end
 
 function M.parse_text(text, current_file)
+	return M.parse_output(text, current_file).diagnostics
+end
+
+function M.parse_output(text, current_file)
 	local lines = vim.split(text or "", "\n")
 	local diagnostics = {}
+	local investigations = {}
 
 	for _, line in ipairs(lines) do
-		local target_file, line_num, message = parse_prefix(line)
+		local trimmed = vim.trim(line or "")
+		local investigation_line = trimmed:match("^investigate=(.+)$")
+		local finding_line = trimmed:match("^finding=(.+)$")
+		local target_file, line_num, message
+
+		if investigation_line ~= nil then
+			target_file, line_num, message = parse_prefix(investigation_line)
+			if line_num ~= nil and message ~= nil then
+				table.insert(investigations, {
+					file = target_file or current_file,
+					lnum = math.max(line_num - 1, 0),
+					col = 0,
+					message = message,
+					severity = vim.diagnostic.severity.HINT,
+					source = "pitaco-investigate",
+				})
+			end
+		else
+			target_file, line_num, message = parse_prefix(finding_line or line)
+		end
+
 		if line_num ~= nil and message ~= nil then
-			table.insert(diagnostics, {
-				file = target_file or current_file,
-				lnum = math.max(line_num - 1, 0),
-				col = 0,
-				message = message,
-				severity = vim.diagnostic.severity.INFO,
-				source = "pitaco",
-			})
-		elseif #diagnostics > 0 then
+			if investigation_line == nil then
+				table.insert(diagnostics, {
+					file = target_file or current_file,
+					lnum = math.max(line_num - 1, 0),
+					col = 0,
+					message = message,
+					severity = vim.diagnostic.severity.INFO,
+					source = "pitaco",
+				})
+			end
+		elseif investigation_line == nil and #diagnostics > 0 then
 			diagnostics[#diagnostics].message = diagnostics[#diagnostics].message .. "\n" .. line
 		end
 	end
 
-	return diagnostics
+	return {
+		diagnostics = diagnostics,
+		investigations = investigations,
+	}
 end
 
 return M

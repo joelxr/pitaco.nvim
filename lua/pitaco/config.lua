@@ -146,7 +146,8 @@ Only report a finding if you can explain:
 
 Prefer fewer, higher-confidence findings over many weak ones.
 If there are no meaningful issues, return no findings.
-Return only raw finding lines.
+Return only raw finding or investigation lines.
+During first-pass review, you may also return raw investigation lines for suspicious changes that need more same-file or downstream context before a finding can be proven.
 Do not add any introduction, summary, headings, numbering, bullets, markdown, code fences, or explanatory text before or after the findings.
 If there are no findings, return an empty response.
 You may report findings in the file under review or in other repository files when the repository context reveals a real issue.
@@ -155,6 +156,8 @@ If a problem is in another file, you must use that file's repo-relative path and
 If you cannot name the exact other file and line, omit the finding.
 For findings in the file under review, use exactly: line=<num>: <issue and proposed solution>.
 For findings in other files, use exactly: file=<repo-relative-path> line=<num>: <issue and proposed solution>.
+For investigation requests, use exactly: investigate=file=<repo-relative-path> line=<num>: <specific uncertainty to investigate>.
+Use investigate= only when the changed code is suspicious but the shown context is insufficient to prove a defect.
 For `line=<num>`, use the exact source line number shown in the numbered current-buffer listing.
 Do not count lines from the prompt, headings, diff headers, or repository context blocks.
 Choose the smallest relevant line that demonstrates the issue; do not default to the start of a function or block unless that line is itself faulty.
@@ -429,6 +432,20 @@ end
 
 function M.get_review_max_diff_requests()
 	local value = vim.g.pitaco_review_max_diff_requests
+	if value == nil or value == false then
+		return nil
+	end
+
+	local number = tonumber(value)
+	if number == nil or number <= 0 then
+		return nil
+	end
+
+	return math.floor(number)
+end
+
+function M.get_review_max_investigation_requests()
+	local value = vim.g.pitaco_review_max_investigation_requests
 	if value == nil or value == false then
 		return nil
 	end

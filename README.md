@@ -121,6 +121,7 @@ require('pitaco').setup({
     opencode_url = "http://127.0.0.1:4096",
     opencode_agent = "build",
     review_max_diff_requests = nil, -- nil reviews every diff hunk; set a number to cap large PR review calls
+    review_max_investigation_requests = nil, -- nil runs every model-requested deeper review; set a number to cap cost/latency
     language = "english",
     debug = false, -- Enable request/response debug logs via vim.notify and a saved log file
     debug_log_path = nil, -- Optional path for full debug logs; defaults to stdpath("state") .. "/pitaco/debug.log"
@@ -194,6 +195,7 @@ You can temporarily override it during the current Neovim session with:
 `features.<scope>.ollama_options` overrides or extends the base `ollama_options` for that scope.
 `opencode_url` points to a running `opencode serve` instance. When `model_id = "default"` for `provider = "opencode"`, Pitaco omits the model from the request and lets OpenCode choose its configured default. Pitaco disables mutating tools for OpenCode request sessions and wraps prompts as plain text completion tasks.
 `review_max_diff_requests` limits how many per-hunk review requests `:Pitaco review diff` sends. It defaults to `nil`, so Pitaco reviews every diff hunk; set a number when using slower or paid models and you want to cap cost/latency.
+`review_max_investigation_requests` limits deeper follow-up review requests proposed by the first-pass reviewer. It defaults to `nil`, so Pitaco investigates every requested suspicious area before verification.
 `auto_index_on_project_open = true` makes Pitaco start indexing automatically when you open a buffer inside a detected project.
 `auto_index_debounce_ms` delays that automatic run so opening several buffers during startup does not immediately spawn duplicate indexing work.
 Auto-index is disabled by default and runs only once per project root in a Neovim session.

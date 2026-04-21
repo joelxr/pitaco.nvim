@@ -6,6 +6,7 @@ local review_diagnostics = require("pitaco.review_diagnostics")
 local review_parser = require("pitaco.review_parser")
 local review_renderer = require("pitaco.review_renderer")
 local review_store = require("pitaco.review_store")
+local review_investigator = require("pitaco.review_investigator")
 local review_verifier = require("pitaco.review_verifier")
 
 local M = {}
@@ -39,6 +40,12 @@ local function verifier_progress_message(metadata, current_request, total_reques
 	local provider = metadata.verifier_provider or "unknown"
 	local model_id = metadata.verifier_model_id or "unknown"
 	return ("Verifying %d/%d with %s/%s"):format(current_request or 0, total_requests or 0, provider, model_id)
+end
+
+local function investigation_progress_message(metadata, current_request, total_requests)
+	local provider = metadata.provider or "unknown"
+	local model_id = metadata.model_id or "unknown"
+	return ("Investigating %d/%d with %s/%s"):format(current_request or 0, total_requests or 0, provider, model_id)
 end
 
 local function should_reject_weak_finding(diagnostic)
@@ -205,6 +212,7 @@ function M.make_requests(namespace, provider, request_bundle)
 	local request_index = 0
 	local aggregated = {}
 	local reviewer_candidates = {}
+	local investigation_requests = {}
 
 	local function append_diagnostics(diagnostics)
 		for _, diag in ipairs(diagnostics or {}) do
@@ -222,6 +230,12 @@ function M.make_requests(namespace, provider, request_bundle)
 	local function append_candidates(diagnostics)
 		for _, diagnostic in ipairs(diagnostics or {}) do
 			table.insert(reviewer_candidates, vim.deepcopy(diagnostic))
+		end
+	end
+
+	local function append_investigations(investigations)
+		for _, investigation in ipairs(investigations or {}) do
+			table.insert(investigation_requests, vim.deepcopy(investigation))
 		end
 	end
 
@@ -245,6 +259,31 @@ function M.make_requests(namespace, provider, request_bundle)
 		if #deduped ~= #diagnostics then
 			log.debug(("Deduped reviewer candidates from %d to %d"):format(#diagnostics, #deduped))
 			log.debug_table("deduped reviewer candidates", deduped)
+		end
+
+		return deduped
+	end
+
+	local function dedupe_investigations(investigations)
+		local deduped = {}
+		local seen = {}
+
+		for _, investigation in ipairs(investigations or {}) do
+			local key = table.concat({
+				tostring(investigation.file or ""),
+				tostring(investigation.lnum or 0),
+				tostring(investigation.message or ""),
+			}, "|")
+
+			if not seen[key] then
+				seen[key] = true
+				table.insert(deduped, investigation)
+			end
+		end
+
+		if #deduped ~= #investigations then
+			log.debug(("Deduped investigation requests from %d to %d"):format(#investigations, #deduped))
+			log.debug_table("deduped investigation requests", deduped)
 		end
 
 		return deduped
@@ -368,6 +407,89 @@ function M.make_requests(namespace, provider, request_bundle)
 		verify_next()
 	end
 
+	local function run_investigation_stage(investigations, done)
+		if #investigations == 0 then
+			done()
+			return
+		end
+
+		local max_investigation_requests = require("pitaco.config").get_review_max_investigation_requests()
+		local selected = investigations
+		if max_investigation_requests ~= nil and #investigations > max_investigation_requests then
+			selected = {}
+			for index = 1, max_investigation_requests do
+				table.insert(selected, investigations[index])
+			end
+			log.debug(
+				("review investigation request cap applied: max=%d skipped=%d"):format(
+					max_investigation_requests,
+					#investigations - #selected
+				)
+			)
+		end
+
+		local investigation_index = 0
+		local total_investigations = #selected
+
+		local function investigate_next()
+			investigation_index = investigation_index + 1
+			if investigation_index > total_investigations then
+				done()
+				return
+			end
+
+			local investigation = selected[investigation_index]
+			local request_json = review_investigator.build_request(provider, metadata, investigation)
+
+			log.debug(
+				("Dispatching investigation request %d/%d via provider '%s'"):format(
+					investigation_index,
+					total_investigations,
+					provider.name or "unknown"
+				)
+			)
+			log.preview_json("investigation request payload", request_json)
+			progress.update(
+				investigation_progress_message(metadata, investigation_index, total_investigations),
+				investigation_index,
+				total_investigations
+			)
+
+			dispatch_provider_request(provider, request_json, function(response, error_message)
+				if error_message ~= nil then
+					log.preview_text("investigation request error", error_message)
+					investigate_next()
+					return
+				end
+
+				if response == nil then
+					log.debug("investigation request returned nil response without explicit error")
+					investigate_next()
+					return
+				end
+
+				local raw_text = provider.extract_text and provider.extract_text(response) or ""
+				local parse_ok, parsed = pcall(
+					review_parser.parse_output,
+					raw_text,
+					investigation.file or metadata.buffer_path
+				)
+				if not parse_ok then
+					log.debug_table("investigation response parse failure", response)
+					investigate_next()
+					return
+				end
+
+				local normalized_diagnostics = normalize_with_logging(parsed.diagnostics or {}, "investigation response")
+				local filtered_candidates = filter_weak_findings(normalized_diagnostics, "investigation response")
+				append_candidates(filtered_candidates)
+				investigate_next()
+			end)
+		end
+
+		investigate_next()
+	end
+
 	local function finish()
 		progress.stop()
 
@@ -405,6 +527,14 @@ function M.make_requests(namespace, provider, request_bundle)
 				return
 			end
 
+			log.debug(
+				("review persisted: id=%s items=%d repo=%s"):format(
+					review.id or "unknown",
+					tonumber(review.item_count) or #(review.items or {}),
+					review.repo_root or "unknown"
+				)
+			)
+
 			project_immediate_diagnostics(namespace, aggregated, metadata.repo_root)
 
 			local activated, activate_error = review_renderer.activate_review(review)
@@ -434,8 +564,11 @@ function M.make_requests(namespace, provider, request_bundle)
 
 	local function process_next()
 		if #requests == 0 then
-			local merged_candidates = dedupe_candidates(reviewer_candidates)
-			run_verifier_stage(merged_candidates, finish)
+			local merged_investigations = dedupe_investigations(investigation_requests)
+			run_investigation_stage(merged_investigations, function()
+				local merged_candidates = dedupe_candidates(reviewer_candidates)
+				run_verifier_stage(merged_candidates, finish)
+			end)
 			return
 		end
 
@@ -467,7 +600,8 @@ function M.make_requests(namespace, provider, request_bundle)
 				return
 			end
 
-			local parse_ok, diagnostics = pcall(provider.parse_response, response, metadata.buffer_path)
+			local raw_text = provider.extract_text and provider.extract_text(response) or ""
+			local parse_ok, parsed = pcall(review_parser.parse_output, raw_text, metadata.buffer_path)
 
 			if not parse_ok then
 				log.debug_table("analysis response parse failure", response)
@@ -476,9 +610,11 @@ function M.make_requests(namespace, provider, request_bundle)
 				return
 			end
 
-			local normalized_diagnostics = normalize_with_logging(diagnostics, "reviewer response")
+			local normalized_diagnostics = normalize_with_logging(parsed.diagnostics or {}, "reviewer response")
 			local filtered_candidates = filter_weak_findings(normalized_diagnostics, "reviewer response")
+			local normalized_investigations = normalize_with_logging(parsed.investigations or {}, "reviewer investigation requests")
 			append_candidates(filtered_candidates)
+			append_investigations(normalized_investigations)
 			process_next()
 		end)
 	end

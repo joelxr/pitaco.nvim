@@ -41,7 +41,22 @@ local function current_repo_root()
 	if path == nil or path == "" then
 		path = vim.fn.getcwd()
 	end
-	return context_engine.find_repo_root(path)
+
+	if path:match("^%w[%w+.-]*://") then
+		path = path:gsub("^%w[%w+.-]*://", "")
+	end
+
+	local root = context_engine.find_repo_root(path)
+	if root ~= nil and not vim.tbl_isempty(review_store.list_reviews(root)) then
+		return root
+	end
+
+	local cwd_root = context_engine.find_repo_root(vim.fn.getcwd())
+	if cwd_root ~= nil and (root == nil or not vim.tbl_isempty(review_store.list_reviews(cwd_root))) then
+		return cwd_root
+	end
+
+	return root or cwd_root
 end
 
 local function relative_time(iso_timestamp)

@@ -388,8 +388,9 @@ local function build_diff_slice_prompt(review_context, slice)
 	local sections = {
 		table.concat(build_prompt_header("diff"), "\n"),
 		"Review scope: diff slice",
-		"Return at most 2 findings for this slice.",
+		"Return at most 2 findings and at most 2 investigation requests for this slice.",
 		"If the shown changed code appears correct, return an empty response.",
+		"If the changed code is suspicious but this prompt does not prove a bug, return an investigate= line instead of a finding.",
 		("Base branch: %s"):format(review_context.base_branch or "unknown"),
 		("Changed file: %s"):format(slice.file or "unknown"),
 	}
