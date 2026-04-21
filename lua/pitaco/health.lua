@@ -5,6 +5,7 @@ local VALID_PROVIDERS = {
   anthropic = true,
   openrouter = true,
   ollama = true,
+  opencode = true,
 }
 
 local DEFAULT_MODELS = {
@@ -12,12 +13,18 @@ local DEFAULT_MODELS = {
   anthropic = "claude-haiku-4-5",
   openrouter = "openrouter/deepseek/deepseek-chat-v3-0324:free",
   ollama = "llama3.1",
+  opencode = "default",
 }
 
 local DEFAULT_OLLAMA_URL = "http://localhost:11434"
+local DEFAULT_OPENCODE_URL = "http://127.0.0.1:4096"
 
 local function is_non_empty_string(value)
   return type(value) == "string" and value ~= ""
+end
+
+local function shell_escape(value)
+  return "'" .. tostring(value):gsub("'", "'\\''") .. "'"
 end
 
 local function check_plenary()
@@ -89,7 +96,7 @@ local function check_provider_config(scope)
 
   if not VALID_PROVIDERS[provider] then
     vim.health.error(("Invalid provider configured for %s scope: %s"):format(label, provider))
-    vim.health.info("Valid providers: openai, anthropic, openrouter, ollama")
+    vim.health.info("Valid providers: openai, anthropic, openrouter, ollama, opencode")
     return false
   end
 
@@ -151,6 +158,43 @@ local function check_ollama_url()
   return false
 end
 
+local function check_opencode_url()
+  local config = require("pitaco.config")
+  local url = config.get_opencode_url()
+  if not is_non_empty_string(url) then
+    url = DEFAULT_OPENCODE_URL
+    vim.health.warn(("OpenCode URL not set in setup(); default will be used: %s"):format(url))
+  elseif not url:match("^https?://") then
+    vim.health.warn(("OpenCode URL looks invalid (expected http/https): %s"):format(url))
+  else
+    vim.health.ok(("OpenCode URL configured: %s"):format(url))
+  end
+
+  local parts = { "curl", "-fsS", "--max-time", "2" }
+  local auth = config.get_opencode_auth()
+  if auth ~= nil and type(vim.base64) == "table" and type(vim.base64.encode) == "function" then
+    table.insert(parts, "-H")
+    table.insert(parts, shell_escape("Authorization: Basic " .. vim.base64.encode(auth.username .. ":" .. auth.password)))
+  end
+  table.insert(parts, shell_escape(url:gsub("/+$", "") .. "/global/health"))
+
+  local handle = io.popen(table.concat(parts, " "))
+  if not handle then
+    vim.health.warn("Could not run curl to test OpenCode endpoint")
+    return false
+  end
+
+  local result = handle:read("*a")
+  local success = handle:close()
+  if success and result and result:match('"healthy"%s*:%s*true') then
+    vim.health.ok("OpenCode server is reachable")
+    return true
+  end
+
+  vim.health.warn(("OpenCode server is not reachable: %s/global/health"):format(url:gsub("/+$", "")))
+  return false
+end
+
 local function check_scope_resolution(scope)
   local config = require("pitaco.config")
   local label = scope == nil and "default" or scope
@@ -176,6 +220,7 @@ local function check_all_provider_setups(selected_provider)
     anthropic = true,
     openrouter = true,
     ollama = true,
+    opencode = true,
   }
 
   ready.openai = check_api_key("openai", "OPENAI_API_KEY")
@@ -185,6 +230,8 @@ local function check_all_provider_setups(selected_provider)
   ready.openrouter = check_api_key("openrouter", "OPENROUTER_API_KEY")
 
   ready.ollama = check_ollama_url()
+
+  ready.opencode = check_opencode_url()
 
   if selected_provider ~= nil and VALID_PROVIDERS[selected_provider] then
     check_model(selected_provider, config.get_model(selected_provider))

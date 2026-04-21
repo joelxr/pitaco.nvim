@@ -5,6 +5,7 @@ local DEFAULT_MODELS = {
 	anthropic = "claude-haiku-4-5",
 	openrouter = "openrouter/deepseek/deepseek-chat-v3-0324:free",
 	ollama = "llama3.1",
+	opencode = "default",
 }
 
 local default_opts = {
@@ -12,6 +13,10 @@ local default_opts = {
 	ollama_url = "http://localhost:11434",
 	ollama_options = nil,
 	ollama_keep_alive = nil,
+	opencode_url = "http://127.0.0.1:4096",
+	opencode_username = nil,
+	opencode_password = nil,
+	opencode_password_env = "OPENCODE_SERVER_PASSWORD",
 	provider = "anthropic",
 	language = "english",
 	commit_keymap = nil,
@@ -130,6 +135,10 @@ function M.setup(opts)
 	vim.g.pitaco_ollama_url = opts.ollama_url
 	vim.g.pitaco_ollama_options = type(opts.ollama_options) == "table" and vim.deepcopy(opts.ollama_options) or nil
 	vim.g.pitaco_ollama_keep_alive = opts.ollama_keep_alive
+	vim.g.pitaco_opencode_url = opts.opencode_url
+	vim.g.pitaco_opencode_username = opts.opencode_username
+	vim.g.pitaco_opencode_password = opts.opencode_password
+	vim.g.pitaco_opencode_password_env = opts.opencode_password_env
 	vim.g.pitaco_language = opts.language
 	vim.g.pitaco_commit_keymap = opts.commit_keymap
 	vim.g.pitaco_commit_system_prompt = opts.commit_system_prompt

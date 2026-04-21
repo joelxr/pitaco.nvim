@@ -4,9 +4,21 @@ import { loadContextConfig } from "./config.js";
 import { cosineSimilarity, embedTexts, lexicalOverlap } from "./embeddings.js";
 import { loadStore } from "./store.js";
 
+function candidateText(chunk) {
+  return [
+    `File: ${chunk.file}`,
+    `Language: ${chunk.language}`,
+    `Kind: ${chunk.kind}`,
+    `Symbol: ${chunk.symbol}`,
+    `Imports: ${(chunk.imports || []).join(" | ")}`,
+    `Exports: ${(chunk.exports || []).join(" | ")}`,
+    chunk.code || "",
+  ].join("\n");
+}
+
 function scoreChunk(queryText, queryEmbedding, chunk, currentFile) {
   const embeddingScore = cosineSimilarity(queryEmbedding, chunk.embedding);
-  const lexicalScore = lexicalOverlap(queryText, chunk.embeddingText);
+  const lexicalScore = lexicalOverlap(queryText, candidateText(chunk));
   const filePenalty = chunk.file === currentFile ? -0.2 : 0;
   const symbolBoost = queryText.includes(chunk.symbol) ? 0.1 : 0;
   return embeddingScore + lexicalScore * 0.35 + filePenalty + symbolBoost;

@@ -5,6 +5,7 @@ local DEFAULT_MODELS = {
 	anthropic = "claude-haiku-4-5",
 	openrouter = "openrouter/deepseek/deepseek-chat-v3-0324:free",
 	ollama = "llama3.1",
+	opencode = "default",
 }
 
 local DEFAULT_PROMPT_DIFF_EXCLUDE_FILES = {
@@ -507,6 +508,36 @@ end
 
 function M.get_ollama_url()
 	return vim.g.pitaco_ollama_url or "http://localhost:11434"
+end
+
+function M.get_opencode_url()
+	return vim.g.pitaco_opencode_url or "http://127.0.0.1:4096"
+end
+
+function M.get_opencode_auth()
+	local username = vim.g.pitaco_opencode_username
+	local password = vim.g.pitaco_opencode_password
+	local password_env = vim.g.pitaco_opencode_password_env
+
+	if type(username) ~= "string" or username == "" then
+		username = "opencode"
+	end
+
+	if type(password) ~= "string" or password == "" then
+		if type(password_env) ~= "string" or password_env == "" then
+			password_env = "OPENCODE_SERVER_PASSWORD"
+		end
+		password = os.getenv(password_env)
+	end
+
+	if type(password) ~= "string" or password == "" then
+		return nil
+	end
+
+	return {
+		username = username,
+		password = password,
+	}
 end
 
 return M

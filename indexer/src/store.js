@@ -15,7 +15,17 @@ function readJson(filePath, fallback) {
 }
 
 function writeJson(filePath, value) {
-  fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
+  fs.writeFileSync(filePath, JSON.stringify(value));
+}
+
+function removeFile(filePath) {
+  try {
+    fs.unlinkSync(filePath);
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+  }
 }
 
 export function loadStore(root) {
@@ -25,7 +35,6 @@ export function loadStore(root) {
     paths,
     manifest: readJson(paths.manifestPath, { version: 1, files: {} }),
     chunks: readJson(paths.chunksPath, []),
-    embeddings: readJson(paths.embeddingsPath, { version: 1, items: {} }),
     summary: readJson(paths.summaryPath, {}),
   };
 }
@@ -36,7 +45,7 @@ export function saveStore(root, store) {
   ensureDir(paths.indexDir);
   writeJson(paths.manifestPath, store.manifest);
   writeJson(paths.chunksPath, store.chunks);
-  writeJson(paths.embeddingsPath, store.embeddings);
+  removeFile(paths.embeddingsPath);
   writeJson(paths.summaryPath, store.summary);
 }
 

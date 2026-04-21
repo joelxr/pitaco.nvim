@@ -17,6 +17,10 @@ local function load_provider(provider_name)
 		return require("pitaco.providers.ollama")
 	end
 
+	if provider_name == "opencode" then
+		return require("pitaco.providers.opencode")
+	end
+
 	error("Invalid provider name: " .. provider_name)
 end
 

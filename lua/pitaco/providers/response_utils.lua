@@ -103,4 +103,35 @@ function M.ollama_text(response)
 	return M.join_text(response.message.content)
 end
 
+function M.opencode_text(response)
+	if type(response) ~= "table" then
+		return ""
+	end
+
+	if type(response.info) == "table" and response.info.structured_output ~= nil then
+		local ok, encoded = pcall(vim.json.encode, response.info.structured_output)
+		if ok then
+			return encoded
+		end
+	end
+
+	if type(response.parts) ~= "table" then
+		return ""
+	end
+
+	local parts = {}
+	for _, part in ipairs(response.parts) do
+		if type(part) == "table" then
+			if part.type == "text" then
+				append_text(parts, part.text)
+			elseif part.type ~= "reasoning" then
+				append_text(parts, part.text)
+				append_text(parts, part.content)
+			end
+		end
+	end
+
+	return table.concat(parts, "\n")
+end
+
 return M

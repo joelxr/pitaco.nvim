@@ -78,6 +78,10 @@ function embeddingSourceKey(embeddingConfig, engine = embeddingConfig.provider |
   return [engine, model, baseUrl].join(":");
 }
 
+function compactVector(vector) {
+  return vector.map((value) => Number(value.toFixed(6)));
+}
+
 function canReuseChunkEmbedding(chunk, expectedSource, expectedEngine) {
   if (!Array.isArray(chunk?.embedding) || chunk.embedding.length === 0) {
     return false;
@@ -90,27 +94,8 @@ function canReuseChunkEmbedding(chunk, expectedSource, expectedEngine) {
   return chunk.embedding_engine === expectedEngine;
 }
 
-function canReuseEmbeddingEntry(entry, expectedSource, expectedEngine) {
-  if (!Array.isArray(entry?.embedding) || entry.embedding.length === 0) {
-    return false;
-  }
-
-  if (typeof entry.embedding_source === "string" && entry.embedding_source !== "") {
-    return entry.embedding_source === expectedSource;
-  }
-
-  return entry.embedding_engine === expectedEngine;
-}
-
 function buildEmbeddingCache(store, expectedSource, expectedEngine) {
   const cache = new Map();
-  const items = store.embeddings && typeof store.embeddings.items === "object" ? store.embeddings.items : {};
-
-  for (const [embeddingTextHash, entry] of Object.entries(items)) {
-    if (canReuseEmbeddingEntry(entry, expectedSource, expectedEngine) && !cache.has(embeddingTextHash)) {
-      cache.set(embeddingTextHash, entry);
-    }
-  }
 
   for (const chunk of store.chunks) {
     if (!canReuseChunkEmbedding(chunk, expectedSource, expectedEngine)) {
@@ -126,16 +111,22 @@ function buildEmbeddingCache(store, expectedSource, expectedEngine) {
   return cache;
 }
 
-function storeEmbeddingCacheEntry(cache, chunk) {
-  const embeddingTextHash = chunk?.embeddingTextHash || (chunk?.embeddingText ? sha1(chunk.embeddingText) : "");
-  if (!embeddingTextHash || !Array.isArray(chunk.embedding) || chunk.embedding.length === 0) {
-    return;
-  }
-
-  cache.items[embeddingTextHash] = {
-    embedding: chunk.embedding,
-    embedding_engine: chunk.embedding_engine,
-    embedding_source: chunk.embedding_source,
+function persistedChunk(chunk, embedding, embeddingEngine, embeddingSource) {
+  return {
+    id: chunk.id,
+    file: chunk.file,
+    language: chunk.language,
+    kind: chunk.kind,
+    symbol: chunk.symbol,
+    startLine: chunk.startLine,
+    endLine: chunk.endLine,
+    imports: chunk.imports,
+    exports: chunk.exports,
+    code: chunk.code,
+    embeddingTextHash: chunk.embeddingTextHash,
+    embedding: compactVector(embedding),
+    embedding_engine: embeddingEngine,
+    embedding_source: embeddingSource,
   };
 }
 
@@ -236,7 +227,6 @@ export async function indexRepository(root, options = {}) {
   const existingByEmbeddingText = buildEmbeddingCache(store, expectedEmbeddingSource, expectedEmbeddingEngine);
   const nextManifest = { version: 1, files: {} };
   const nextChunks = [];
-  const nextEmbeddings = { version: 1, items: {} };
   let indexedFiles = 0;
   let changedFiles = 0;
   const pendingFiles = [];
@@ -256,7 +246,6 @@ export async function indexRepository(root, options = {}) {
         const chunk = existingById.get(chunkId);
         if (chunk) {
           nextChunks.push(chunk);
-          storeEmbeddingCacheEntry(nextEmbeddings, chunk);
         }
       }
       continue;
@@ -325,7 +314,6 @@ export async function indexRepository(root, options = {}) {
         const chunk = existingById.get(chunkId);
         if (chunk) {
           nextChunks.push(chunk);
-          storeEmbeddingCacheEntry(nextEmbeddings, chunk);
         }
       }
       continue;
@@ -353,12 +341,12 @@ export async function indexRepository(root, options = {}) {
     chunks.forEach((chunk, index) => {
       const cachedChunk = existingByEmbeddingText.get(chunk.embeddingTextHash);
       if (cachedChunk) {
-        indexedChunks[index] = {
-          ...chunk,
-          embedding: cachedChunk.embedding,
-          embedding_engine: cachedChunk.embedding_engine,
-          embedding_source: cachedChunk.embedding_source || expectedEmbeddingSource,
-        };
+        indexedChunks[index] = persistedChunk(
+          chunk,
+          cachedChunk.embedding,
+          cachedChunk.embedding_engine,
+          cachedChunk.embedding_source || expectedEmbeddingSource,
+        );
         return;
       }
 
@@ -371,18 +359,17 @@ export async function indexRepository(root, options = {}) {
       const embeddingSource = embeddingSourceKey(config.embedding, embeddings.engine);
 
       pendingIndexes.forEach((chunkIndex, resultIndex) => {
-        indexedChunks[chunkIndex] = {
-          ...chunks[chunkIndex],
-          embedding: embeddings.vectors[resultIndex],
-          embedding_engine: embeddings.engine,
-          embedding_source: embeddingSource,
-        };
+        indexedChunks[chunkIndex] = persistedChunk(
+          chunks[chunkIndex],
+          embeddings.vectors[resultIndex],
+          embeddings.engine,
+          embeddingSource,
+        );
       });
     }
 
     indexedChunks.forEach((chunk) => {
       nextChunks.push(chunk);
-      storeEmbeddingCacheEntry(nextEmbeddings, chunk);
     });
 
     nextManifest.files[file.relativePath] = {
@@ -398,7 +385,6 @@ export async function indexRepository(root, options = {}) {
 
   store.manifest = nextManifest;
   store.chunks = nextChunks;
-  store.embeddings = nextEmbeddings;
   store.summary = buildSummary(root, nextManifest, nextChunks);
   if (onProgress) {
     onProgress({

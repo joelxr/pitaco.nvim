@@ -5,13 +5,14 @@ local model_state = require("pitaco.model_state")
 local progress = require("pitaco.progress")
 local curl_json
 
-local PROVIDERS = { "openai", "anthropic", "openrouter", "ollama" }
+local PROVIDERS = { "openai", "anthropic", "openrouter", "ollama", "opencode" }
 
 local DEFAULT_MODELS = {
 	openai = "gpt-5-mini",
 	anthropic = "claude-haiku-4-5",
 	openrouter = "openrouter/deepseek/deepseek-chat-v3-0324:free",
 	ollama = "llama3.1",
+	opencode = "default",
 }
 
 local function is_non_empty_string(value)
@@ -85,6 +86,17 @@ local function sorted_strings(items)
 	return items
 end
 
+local function opencode_headers()
+	local auth = config.get_opencode_auth()
+	if auth == nil or type(vim.base64) ~= "table" or type(vim.base64.encode) ~= "function" then
+		return nil
+	end
+
+	return {
+		"Authorization: Basic " .. vim.base64.encode(auth.username .. ":" .. auth.password),
+	}
+end
+
 local function get_provider_status(provider)
 	if provider == "openai" then
 		return is_non_empty_string(os.getenv("OPENAI_API_KEY")), "OPENAI_API_KEY"
@@ -102,6 +114,13 @@ local function get_provider_status(provider)
 			return true, "local"
 		end
 		return false, "ollama_unreachable"
+	end
+	if provider == "opencode" then
+		local payload = curl_json(config.get_opencode_url() .. "/global/health", opencode_headers(), 2)
+		if payload ~= nil and payload.healthy == true then
+			return true, "server"
+		end
+		return false, "server_unreachable"
 	end
 	return false, "unknown"
 end
@@ -253,6 +272,62 @@ local function fetch_ollama_models()
 	return sorted_strings(models)
 end
 
+local function add_opencode_model(models, provider_id, model_id)
+	if not is_non_empty_string(provider_id) or not is_non_empty_string(model_id) then
+		return
+	end
+	table.insert(models, provider_id .. "/" .. model_id)
+end
+
+local function collect_opencode_provider_models(models, provider)
+	if type(provider) ~= "table" then
+		return
+	end
+
+	local provider_id = provider.id or provider.providerID or provider.name
+	if not is_non_empty_string(provider_id) then
+		return
+	end
+
+	if type(provider.models) == "table" then
+		for key, model in pairs(provider.models) do
+			if type(model) == "table" then
+				add_opencode_model(models, provider_id, model.id or model.modelID or model.name or key)
+			elseif type(model) == "string" then
+				add_opencode_model(models, provider_id, model)
+			elseif type(key) == "string" then
+				add_opencode_model(models, provider_id, key)
+			end
+		end
+	end
+end
+
+local function fetch_opencode_models()
+	local payload = curl_json(config.get_opencode_url() .. "/config/providers", opencode_headers(), 4)
+	if payload == nil then
+		payload = curl_json(config.get_opencode_url() .. "/provider", opencode_headers(), 4)
+	end
+	if payload == nil then
+		return {}
+	end
+
+	local models = { "default" }
+	if type(payload.default) == "table" then
+		for provider_id, model_id in pairs(payload.default) do
+			add_opencode_model(models, provider_id, model_id)
+		end
+	end
+
+	local providers = payload.providers or payload.all
+	if type(providers) == "table" then
+		for _, provider in ipairs(providers) do
+			collect_opencode_provider_models(models, provider)
+		end
+	end
+
+	return sorted_strings(models)
+end
+
 local function provider_models(provider, current_model)
 	local models = {}
 	if provider == "openai" then
@@ -263,6 +338,8 @@ local function provider_models(provider, current_model)
 		models = fetch_openrouter_models()
 	elseif provider == "ollama" then
 		models = fetch_ollama_models()
+	elseif provider == "opencode" then
+		models = fetch_opencode_models()
 	end
 
 	if #models == 0 then
@@ -382,6 +459,8 @@ local function build_entries(scope)
 			provider_balance = string.format("$%.2f", openai_balance)
 		elseif provider == "ollama" then
 			provider_balance = "n/a"
+		elseif provider == "opencode" then
+			provider_balance = "n/a"
 		end
 
 		for _, model_id in ipairs(models) do
@@ -390,6 +469,9 @@ local function build_entries(scope)
 			if provider == "ollama" then
 				plan = "local"
 				cost = "n/a"
+			elseif provider == "opencode" then
+				plan = "server"
+				cost = "managed by OpenCode"
 			elseif provider == "openrouter" then
 				local pricing = openrouter_costs[model_id]
 				if pricing ~= nil then

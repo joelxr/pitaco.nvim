@@ -88,12 +88,24 @@ export ANTHROPIC_API_KEY="your-anthropic-api-key"
 export OPENROUTER_API_KEY="your-openrouter-api-key"
 ```
 
-> **Disclaimer**: Currently, Pitaco only supports those providers. However, support for additional models is planned in the roadmap.
-
 For `ollama`, no API key is required. You may set:
 - `model_id` (default: `llama3.1` when `provider = "ollama"`)
 - `ollama_url` (default: `http://localhost:11434`)
 - `ollama_options` (optional request options sent under `options`, such as `num_ctx`)
+
+For `opencode`, start an OpenCode server separately and let Pitaco send requests to it:
+
+```bash
+opencode serve --port 4096
+```
+
+You may set:
+- `model_id` as an OpenCode model id in `provider/model` format, or `default` to use the OpenCode server default
+- `opencode_url` (default: `http://127.0.0.1:4096`)
+- `opencode_username` (default: `opencode` when password auth is used)
+- `opencode_password_env` (default: `OPENCODE_SERVER_PASSWORD`)
+
+OpenCode credentials and connected accounts are managed by OpenCode itself, for example through `/connect` in the OpenCode TUI.
 
 You can configure Pitaco by adding the following to your Neovim configuration file:
 
@@ -105,6 +117,7 @@ require('pitaco').setup({
     ollama_options = {
         num_ctx = 8192,
     },
+    opencode_url = "http://127.0.0.1:4096",
     language = "english",
     debug = false, -- Enable request/response debug logs via vim.notify and a saved log file
     debug_log_path = nil, -- Optional path for full debug logs; defaults to stdpath("state") .. "/pitaco/debug.log"
@@ -175,6 +188,7 @@ You can temporarily override it during the current Neovim session with:
 `features.summary.additional_instruction` is appended to PR summary requests.
 `ollama_options` is merged into Ollama chat requests as the `options` payload.
 `features.<scope>.ollama_options` overrides or extends the base `ollama_options` for that scope.
+`opencode_url` points to a running `opencode serve` instance. When `model_id = "default"` for `provider = "opencode"`, Pitaco omits the model from the request and lets OpenCode choose its configured default.
 `auto_index_on_project_open = true` makes Pitaco start indexing automatically when you open a buffer inside a detected project.
 `auto_index_debounce_ms` delays that automatic run so opening several buffers during startup does not immediately spawn duplicate indexing work.
 Auto-index is disabled by default and runs only once per project root in a Neovim session.
@@ -340,8 +354,8 @@ When no remote embedding provider is configured, the indexer falls back to a loc
 
 When `debug = true`, Pitaco emits request lifecycle logs for provider calls, including payload previews, HTTP status, decode failures, and response previews. Those events are also appended in full to a saved debug log file at `stdpath("state") .. "/pitaco/debug.log"` by default, or to `debug_log_path` when configured.
 
-The model picker discovers models from provider APIs (with default fallback when needed), including:
-- provider readiness (key configured / ollama reachable)
+The model picker discovers models from provider APIs and the OpenCode server (with default fallback when needed), including:
+- provider readiness (key configured / ollama reachable / opencode server reachable)
 - plan and per-1M pricing when available
 - balance when available (for OpenRouter credits)
 - NUI modal picker with model status and metadata per entry
@@ -355,7 +369,7 @@ The model picker discovers models from provider APIs (with default fallback when
 `Pitaco health` / `checkhealth pitaco` verifies:
 - required tools/deps (`plenary.nvim`, `curl`)
 - optional commit UI dependency (`nui.nvim`)
-- selected provider validity (`openai`, `anthropic`, `openrouter`, `ollama`)
+- selected provider validity (`openai`, `anthropic`, `openrouter`, `ollama`, `opencode`)
 - model setup for each provider (warns when relying on defaults)
 - API keys for cloud providers:
   - `OPENAI_API_KEY`
@@ -364,6 +378,9 @@ The model picker discovers models from provider APIs (with default fallback when
 - Ollama setup:
   - URL format (`ollama_url`)
   - endpoint reachability (`/api/tags`)
+- OpenCode setup:
+  - URL format (`opencode_url`)
+  - server reachability (`/global/health`)
 
 ### Diagnostics UI
 
@@ -506,6 +523,7 @@ Contributions are welcome! Please fork the repository and submit a pull request.
 - [ ] Support for Gemini models
 - [ ] Integration with Deepseek
 - [x] Support for Ollama models
+- [x] Support for OpenCode server
 
 ## License 📄
 
