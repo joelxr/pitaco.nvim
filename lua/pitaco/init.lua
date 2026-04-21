@@ -17,6 +17,7 @@ local default_opts = {
 	opencode_username = nil,
 	opencode_password = nil,
 	opencode_password_env = "OPENCODE_SERVER_PASSWORD",
+	opencode_agent = "build",
 	provider = "anthropic",
 	language = "english",
 	commit_keymap = nil,
@@ -139,6 +140,7 @@ function M.setup(opts)
 	vim.g.pitaco_opencode_username = opts.opencode_username
 	vim.g.pitaco_opencode_password = opts.opencode_password
 	vim.g.pitaco_opencode_password_env = opts.opencode_password_env
+	vim.g.pitaco_opencode_agent = opts.opencode_agent
 	vim.g.pitaco_language = opts.language
 	vim.g.pitaco_commit_keymap = opts.commit_keymap
 	vim.g.pitaco_commit_system_prompt = opts.commit_system_prompt

@@ -540,4 +540,12 @@ function M.get_opencode_auth()
 	}
 end
 
+function M.get_opencode_agent()
+	local agent = vim.g.pitaco_opencode_agent
+	if type(agent) == "string" and agent ~= "" then
+		return agent
+	end
+	return "build"
+end
+
 return M

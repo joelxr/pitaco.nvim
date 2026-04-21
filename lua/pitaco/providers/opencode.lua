@@ -11,6 +11,20 @@ local function trim_trailing_slash(value)
 	return tostring(value or ""):gsub("/+$", "")
 end
 
+local function url_encode(value)
+	return tostring(value or ""):gsub("([^%w%-_%.~])", function(char)
+		return string.format("%%%02X", string.byte(char))
+	end)
+end
+
+local function add_directory_query(url)
+	local cwd = vim.fn.getcwd(0, 0)
+	if type(cwd) ~= "string" or cwd == "" then
+		return url
+	end
+	return url .. "?directory=" .. url_encode(cwd)
+end
+
 local function headers()
 	local config = require("pitaco.config")
 	local result = {
@@ -39,8 +53,41 @@ local function model_config(model_id)
 	}
 end
 
-local function message_text(messages)
+local function text_only_tools()
+	return {
+		bash = false,
+		edit = false,
+		patch = false,
+		task = false,
+		webfetch = false,
+		write = false,
+	}
+end
+
+local function readonly_permissions()
+	return {
+		{ permission = "bash", pattern = "*", action = "deny" },
+		{ permission = "edit", pattern = "*", action = "deny" },
+		{ permission = "webfetch", pattern = "*", action = "deny" },
+		{ permission = "write", pattern = "*", action = "deny" },
+	}
+end
+
+local function append_instruction_block(parts, heading, system_prompt)
+	if type(system_prompt) ~= "string" or vim.trim(system_prompt) == "" then
+		return
+	end
+
+	table.insert(parts, heading)
+	table.insert(parts, system_prompt)
+end
+
+local function message_text(system_prompt, messages)
 	local parts = {}
+	table.insert(parts, "This is a plain text completion request from Pitaco.nvim.")
+	table.insert(parts, "Do not edit files, call tools, produce tool-call JSON, plan next steps, or ask clarifying questions.")
+	table.insert(parts, "Answer only with the final text requested by the system instructions.")
+	append_instruction_block(parts, "Task instructions:", system_prompt)
 	for _, message in ipairs(messages or {}) do
 		if type(message) == "table" then
 			local role = type(message.role) == "string" and message.role or "user"
@@ -50,6 +97,8 @@ local function message_text(messages)
 			end
 		end
 	end
+	append_instruction_block(parts, "Final answer instructions. Follow these exactly:", system_prompt)
+	table.insert(parts, "Return only the final answer now.")
 	return table.concat(parts, "\n\n")
 end
 
@@ -112,12 +161,18 @@ function M.get_model(scope)
 end
 
 function M.build_chat_request(system_prompt, messages, max_tokens, scope)
+	local config = require("pitaco.config")
 	local request_table = {
+		agent = config.get_opencode_agent(),
+		format = {
+			type = "text",
+		},
 		system = system_prompt or "",
+		tools = text_only_tools(),
 		parts = {
 			{
 				type = "text",
-				text = message_text(messages),
+				text = message_text(system_prompt, messages),
 			},
 		},
 	}
@@ -148,7 +203,10 @@ function M.request(json_data, callback)
 		return
 	end
 
-	post_json(base_url .. "/session", { title = "Pitaco" }, function(session, session_error)
+	post_json(add_directory_query(base_url .. "/session"), {
+		title = "Pitaco",
+		permission = readonly_permissions(),
+	}, function(session, session_error)
 		if session_error ~= nil then
 			callback(nil, session_error)
 			return
@@ -159,7 +217,7 @@ function M.request(json_data, callback)
 			return
 		end
 
-		post_json(base_url .. "/session/" .. session.id .. "/message", request_data, callback)
+		post_json(add_directory_query(base_url .. "/session/" .. session.id .. "/message"), request_data, callback)
 	end)
 end
 

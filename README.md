@@ -104,6 +104,7 @@ You may set:
 - `opencode_url` (default: `http://127.0.0.1:4096`)
 - `opencode_username` (default: `opencode` when password auth is used)
 - `opencode_password_env` (default: `OPENCODE_SERVER_PASSWORD`)
+- `opencode_agent` (default: `build`; Pitaco disables mutating tools and asks for plain text)
 
 OpenCode credentials and connected accounts are managed by OpenCode itself, for example through `/connect` in the OpenCode TUI.
 
@@ -118,6 +119,7 @@ require('pitaco').setup({
         num_ctx = 8192,
     },
     opencode_url = "http://127.0.0.1:4096",
+    opencode_agent = "build",
     language = "english",
     debug = false, -- Enable request/response debug logs via vim.notify and a saved log file
     debug_log_path = nil, -- Optional path for full debug logs; defaults to stdpath("state") .. "/pitaco/debug.log"
@@ -188,7 +190,7 @@ You can temporarily override it during the current Neovim session with:
 `features.summary.additional_instruction` is appended to PR summary requests.
 `ollama_options` is merged into Ollama chat requests as the `options` payload.
 `features.<scope>.ollama_options` overrides or extends the base `ollama_options` for that scope.
-`opencode_url` points to a running `opencode serve` instance. When `model_id = "default"` for `provider = "opencode"`, Pitaco omits the model from the request and lets OpenCode choose its configured default.
+`opencode_url` points to a running `opencode serve` instance. When `model_id = "default"` for `provider = "opencode"`, Pitaco omits the model from the request and lets OpenCode choose its configured default. Pitaco disables mutating tools for OpenCode request sessions and wraps prompts as plain text completion tasks.
 `auto_index_on_project_open = true` makes Pitaco start indexing automatically when you open a buffer inside a detected project.
 `auto_index_debounce_ms` delays that automatic run so opening several buffers during startup does not immediately spawn duplicate indexing work.
 Auto-index is disabled by default and runs only once per project root in a Neovim session.
