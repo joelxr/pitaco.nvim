@@ -239,7 +239,7 @@ function M.build_request(provider, metadata, diagnostic)
 
 	return provider.build_chat_request(config.get_review_verifier_system_prompt(), {
 		{ role = "user", content = verifier_prompt },
-	}, 512)
+	}, 512, "review_verifier")
 end
 
 return M

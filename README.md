@@ -52,10 +52,10 @@ Optional dependency:
 
 Once installed, you can use the following commands to interact with Pitaco:
 
-- `:Pitaco` - Review the full branch diff against `main` or `master` and publish findings via the Neovim diagnostics API.
-- `:Pitaco review [diff|file]` - Review the full branch diff against `main`/`master`, or the entire current file. Defaults to `diff`.
-- `:Pitaco diff` / `:Pitaco file` - Shorthand aliases for `:Pitaco review diff` and `:Pitaco review file`.
-- `:PitacoReview [diff|file]` - Alias for repository-aware review. Defaults to `diff`.
+- `:Pitaco` - Review the full branch diff and publish findings via the Neovim diagnostics API.
+- `:Pitaco review [diff|file] [base]` - Review the full branch diff against an optional base such as `master` or `origin/main`, or the entire current file. Defaults to `diff`.
+- `:Pitaco diff [base]` / `:Pitaco file` - Shorthand aliases for `:Pitaco review diff [base]` and `:Pitaco review file`.
+- `:PitacoReview [diff|file] [base]` - Alias for repository-aware review. Defaults to `diff`.
 - `:Pitaco index` / `:PitacoIndex` - Build or update the local repository index used for contextual review.
 - `:Pitaco clear` - Clear the current review.
 - `:Pitaco clearLine` - Clear the current review for the current line.
@@ -64,7 +64,7 @@ Once installed, you can use the following commands to interact with Pitaco:
 - `:Pitaco commit` - Generate a commit message from git changes and confirm the commit.
 - `:Pitaco health` - Run Pitaco checks with `:checkhealth pitaco`.
 - `:Pitaco models [default|scope]` - Open a model picker for the base config or a feature scope such as `review`, `commit`, or `summary`.
-- `:Pitaco summary` - Generate a markdown PR summary for the current branch diff, open it in a modal, and copy it to the clipboard.
+- `:Pitaco summary [base]` - Generate a markdown PR summary for the current branch diff, optionally against a base such as `master` or `origin/main`, open it in a modal, and copy it to the clipboard.
 - `:Pitaco info` / `:Pitaco settings` - Show the resolved runtime Pitaco configuration summary, including active provider/model selections per scope.
 - `:Pitaco debug [on|off|toggle]` - Show or change the plugin debug mode for the current Neovim session.
 - `:Pitaco language [value]` - Show current language, or override it for this Neovim session.
@@ -120,6 +120,7 @@ require('pitaco').setup({
     },
     opencode_url = "http://127.0.0.1:4096",
     opencode_agent = "build",
+    review_max_diff_requests = nil, -- nil reviews every diff hunk; set a number to cap large PR review calls
     language = "english",
     debug = false, -- Enable request/response debug logs via vim.notify and a saved log file
     debug_log_path = nil, -- Optional path for full debug logs; defaults to stdpath("state") .. "/pitaco/debug.log"
@@ -162,6 +163,7 @@ Keep the summary concise and ready to paste into GitHub.
     context_max_chunks = 6,
     context_timeout_ms = 1500,
     context_include_git_diff = true,
+    base_branch = nil, -- Optional explicit diff base such as "master" or "origin/main"
     auto_index_on_project_open = false, -- Auto-run :Pitaco index once per project per session
     auto_index_debounce_ms = 800, -- Wait briefly before auto-indexing a detected project
     auto_index_project_markers = {
@@ -191,6 +193,7 @@ You can temporarily override it during the current Neovim session with:
 `ollama_options` is merged into Ollama chat requests as the `options` payload.
 `features.<scope>.ollama_options` overrides or extends the base `ollama_options` for that scope.
 `opencode_url` points to a running `opencode serve` instance. When `model_id = "default"` for `provider = "opencode"`, Pitaco omits the model from the request and lets OpenCode choose its configured default. Pitaco disables mutating tools for OpenCode request sessions and wraps prompts as plain text completion tasks.
+`review_max_diff_requests` limits how many per-hunk review requests `:Pitaco review diff` sends. It defaults to `nil`, so Pitaco reviews every diff hunk; set a number when using slower or paid models and you want to cap cost/latency.
 `auto_index_on_project_open = true` makes Pitaco start indexing automatically when you open a buffer inside a detected project.
 `auto_index_debounce_ms` delays that automatic run so opening several buffers during startup does not immediately spawn duplicate indexing work.
 Auto-index is disabled by default and runs only once per project root in a Neovim session.
@@ -198,6 +201,7 @@ Project detection uses `vim.fs.find(..., { upward = true })` against `auto_index
 `prompt_diff_exclude_files` removes matching files from AI-bound git diffs used by `:Pitaco review diff`, `:Pitaco summary`, and `:Pitaco commit`.
 By default Pitaco excludes common lockfiles such as `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, and `Cargo.lock`.
 Set `prompt_diff_exclude_files = false` to disable the filter, or pass your own list of repo-relative paths/basenames to override it.
+`base_branch` can force the diff base used by `:Pitaco review diff` and `:Pitaco summary`; when unset, Pitaco uses the upstream/default remote branch or falls back to `main`/`master`.
 
 Provider/model selection resolves like this:
 - Base defaults come from `provider` and `model_id`.
@@ -247,7 +251,9 @@ Flat aliases such as `review_provider`, `review_model_id`, `commit_provider`, `c
 
 `:Pitaco models` changes the base/default provider and model.
 `:Pitaco models commit`, `:Pitaco models review`, or `:Pitaco models summary` changes that feature's scoped provider/model override and shows the current selection in the picker header.
+`:Pitaco review diff master`, `:Pitaco review diff origin/main`, or `:Pitaco diff master` overrides the review diff base for that run only.
 `:Pitaco summary` generates a PR summary from the current branch diff and copies the markdown to your clipboard.
+`:Pitaco summary master` or `:Pitaco summary origin/main` overrides the base for that run only.
 `:Pitaco info` reports the resolved runtime provider/model for the default scope and every feature scope, so inherited and fallback models are visible.
 `:Pitaco debug on`, `:Pitaco debug off`, and `:Pitaco debug toggle` change the live debug flag without re-running `setup()`.
 
@@ -259,7 +265,7 @@ Both review modes publish findings through Neovim's diagnostics API.
 Completed reviews are also persisted under `stdpath("state")`, including provider/model metadata, commit hashes, and findings.
 When a file is reopened, Pitaco restores diagnostics for the active stored review and attempts to relocate findings using nearby source context.
 If relocation fails, the finding is rendered on line `1` with a stale marker.
-Diff mode compares the current branch state against the local `main` branch when available, otherwise `master`.
+Diff mode compares the current branch state against `base_branch` when configured, otherwise the upstream/default remote branch, then `main`/`master`.
 
 Review flow:
 

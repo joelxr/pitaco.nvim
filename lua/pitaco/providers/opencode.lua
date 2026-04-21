@@ -82,7 +82,34 @@ local function append_instruction_block(parts, heading, system_prompt)
 	table.insert(parts, system_prompt)
 end
 
-local function message_text(system_prompt, messages)
+local function is_compact_scope(scope)
+	return scope == "review" or scope == "review_verifier"
+end
+
+local function compact_message_text(messages)
+	for index = #(messages or {}), 1, -1 do
+		local message = messages[index]
+		if type(message) == "table" then
+			local content = response_utils.join_text(message.content)
+			if content ~= "" then
+				return table.concat({
+					"This is a plain text completion request from Pitaco.nvim.",
+					"Do not edit files, call tools, produce tool-call JSON, plan next steps, or ask clarifying questions.",
+					content,
+					"Return only the final answer now.",
+				}, "\n\n")
+			end
+		end
+	end
+
+	return "Return only the final answer now."
+end
+
+local function message_text(system_prompt, messages, scope)
+	if is_compact_scope(scope) then
+		return compact_message_text(messages)
+	end
+
 	local parts = {}
 	table.insert(parts, "This is a plain text completion request from Pitaco.nvim.")
 	table.insert(parts, "Do not edit files, call tools, produce tool-call JSON, plan next steps, or ask clarifying questions.")
@@ -120,6 +147,20 @@ local function decode_response(provider_name, response, callback)
 	end
 
 	log.debug_table(provider_name .. " decoded response", body, 500)
+	if
+		type(body) == "table"
+		and type(body.info) == "table"
+		and type(body.info.error) == "table"
+	then
+		local error_data = body.info.error.data
+		local message = body.info.error.message
+		if type(error_data) == "table" and type(error_data.message) == "string" then
+			message = error_data.message
+		end
+		callback(nil, message or "OpenCode returned an error response")
+		return false
+	end
+
 	return body
 end
 
@@ -172,7 +213,7 @@ function M.build_chat_request(system_prompt, messages, max_tokens, scope)
 		parts = {
 			{
 				type = "text",
-				text = message_text(system_prompt, messages),
+				text = message_text(system_prompt, messages, scope),
 			},
 		},
 	}
@@ -185,8 +226,8 @@ function M.build_chat_request(system_prompt, messages, max_tokens, scope)
 	return vim.json.encode(request_table)
 end
 
-function M.prepare_requests(messages, review_mode)
-	return review.build_requests(M, messages, review_mode)
+function M.prepare_requests(messages, review_mode, opts)
+	return review.build_requests(M, messages, review_mode, opts)
 end
 
 function M.request(json_data, callback)

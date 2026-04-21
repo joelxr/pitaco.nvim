@@ -28,6 +28,8 @@ local default_opts = {
 	context_max_chunks = 6,
 	context_timeout_ms = 1500,
 	context_include_git_diff = true,
+	base_branch = nil,
+	review_max_diff_requests = nil,
 	auto_index_on_project_open = false,
 	auto_index_debounce_ms = 800,
 	auto_index_project_markers = nil,
@@ -150,6 +152,8 @@ function M.setup(opts)
 	vim.g.pitaco_context_max_chunks = opts.context_max_chunks
 	vim.g.pitaco_context_timeout_ms = opts.context_timeout_ms
 	vim.g.pitaco_context_include_git_diff = opts.context_include_git_diff
+	vim.g.pitaco_base_branch = opts.base_branch
+	vim.g.pitaco_review_max_diff_requests = opts.review_max_diff_requests
 	vim.g.pitaco_auto_index_on_project_open = opts.auto_index_on_project_open
 	vim.g.pitaco_auto_index_debounce_ms = opts.auto_index_debounce_ms
 	vim.g.pitaco_auto_index_project_markers = type(opts.auto_index_project_markers) == "table"

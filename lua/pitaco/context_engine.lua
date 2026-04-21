@@ -4,7 +4,7 @@ local log = require("pitaco.log")
 local progress = require("pitaco.progress")
 
 local M = {}
-local MAX_OUTLINE_FILES = 8
+local MAX_OUTLINE_FILES = 16
 local auto_indexed_roots = {}
 local auto_index_timers = {}
 local external_index_watchers = {}
@@ -328,25 +328,59 @@ function M.find_base_branch(root)
 		return nil
 	end
 
-	for _, candidate in ipairs({ "main", "master" }) do
-		local _, local_error = run_job(
-			"git",
-			{ "-C", root, "show-ref", "--verify", "--quiet", "refs/heads/" .. candidate },
-			root,
-			config.get_context_timeout_ms()
-		)
-		if local_error == nil then
-			return candidate
-		end
+	local configured_base = config.get_base_branch()
+	if configured_base ~= nil then
+		return configured_base
+	end
 
-		local _, remote_error = run_job(
-			"git",
-			{ "-C", root, "show-ref", "--verify", "--quiet", "refs/remotes/origin/" .. candidate },
-			root,
-			config.get_context_timeout_ms()
-		)
-		if remote_error == nil then
-			return "origin/" .. candidate
+	local current_branch = join_lines(run_job(
+		"git",
+		{ "-C", root, "branch", "--show-current" },
+		root,
+		config.get_context_timeout_ms()
+	))
+
+	local upstream = join_lines(run_job(
+		"git",
+		{ "-C", root, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}" },
+		root,
+		config.get_context_timeout_ms()
+	))
+	if upstream ~= "" and upstream ~= current_branch and upstream ~= "origin/" .. current_branch then
+		return upstream
+	end
+
+	local origin_head = join_lines(run_job(
+		"git",
+		{ "-C", root, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD" },
+		root,
+		config.get_context_timeout_ms()
+	))
+	if origin_head ~= "" and origin_head ~= "origin/" .. current_branch then
+		return origin_head
+	end
+
+	for _, candidate in ipairs({ "main", "master" }) do
+		if candidate ~= current_branch then
+			local _, local_error = run_job(
+				"git",
+				{ "-C", root, "show-ref", "--verify", "--quiet", "refs/heads/" .. candidate },
+				root,
+				config.get_context_timeout_ms()
+			)
+			if local_error == nil then
+				return candidate
+			end
+
+			local _, remote_error = run_job(
+				"git",
+				{ "-C", root, "show-ref", "--verify", "--quiet", "refs/remotes/origin/" .. candidate },
+				root,
+				config.get_context_timeout_ms()
+			)
+			if remote_error == nil then
+				return "origin/" .. candidate
+			end
 		end
 	end
 
@@ -474,6 +508,33 @@ local function parse_hunk_start(value)
 	return start_line, line_count
 end
 
+local function is_test_path(path)
+	path = tostring(path or "")
+	return path:match("(^|/)__tests__/") ~= nil
+		or path:match("(^|/)tests?/") ~= nil
+		or path:match("%.spec%.") ~= nil
+		or path:match("%.test%.") ~= nil
+end
+
+local function is_low_signal_path(path)
+	path = tostring(path or "")
+	return path:match("^docs?/") ~= nil
+		or path:match("%.md$") ~= nil
+		or path:match("package%-lock%.json$") ~= nil
+		or path:match("pnpm%-lock%.yaml$") ~= nil
+		or path:match("yarn%.lock$") ~= nil
+end
+
+local function outline_priority(path)
+	if is_low_signal_path(path) then
+		return 20
+	end
+	if is_test_path(path) then
+		return 10
+	end
+	return 0
+end
+
 local function push_changed_range(file_map, current_file, start_line, line_count)
 	if current_file == nil or current_file == "" or start_line <= 0 then
 		return
@@ -527,6 +588,11 @@ local function parse_changed_files(diff_text)
 
 	local files = vim.tbl_values(files_by_path)
 	table.sort(files, function(left, right)
+		local left_priority = outline_priority(left.file)
+		local right_priority = outline_priority(right.file)
+		if left_priority ~= right_priority then
+			return left_priority < right_priority
+		end
 		if #left.changedLines ~= #right.changedLines then
 			return #left.changedLines > #right.changedLines
 		end
@@ -712,19 +778,17 @@ function M.outline(root, changed_files)
 	return decoded, nil
 end
 
-function M.collect_review_context(bufnr, review_mode)
-	if not config.is_context_enabled() then
-		return {
-			enabled = false,
-			root = nil,
-			relative_path = nil,
-			project_summary = nil,
-			relevant_chunks = {},
-			git_diff = "",
-		}
-	end
+function M.collect_review_context(bufnr, review_mode, opts)
+	opts = opts or {}
+	local context_enabled = config.is_context_enabled()
 
 	local buffer_path = normalize_path(vim.api.nvim_buf_get_name(bufnr))
+	if buffer_path == nil or vim.loop.fs_stat(buffer_path) == nil then
+		if review_mode == "diff" then
+			buffer_path = normalize_path(vim.fn.getcwd())
+		end
+	end
+
 	if buffer_path == nil or vim.loop.fs_stat(buffer_path) == nil then
 		return {
 			enabled = false,
@@ -738,17 +802,21 @@ function M.collect_review_context(bufnr, review_mode)
 
 	local root = M.find_repo_root(buffer_path)
 	local relative_path = to_repo_relative_path(root, buffer_path)
-	local search_result, search_error = M.search(root, relative_path, config.get_context_max_chunks())
-	if search_error == nil and not has_indexed_context(search_result) then
-		search_error = "Pitaco context index missing or empty for this repository; run :Pitaco index"
-	end
+	local search_result = nil
+	local search_error = nil
+	if context_enabled then
+		search_result, search_error = M.search(root, relative_path, config.get_context_max_chunks())
+		if search_error == nil and not has_indexed_context(search_result) then
+			search_error = "Pitaco context index missing or empty for this repository; run :Pitaco index"
+		end
 
-	if search_error ~= nil then
-		log.debug("context search failed: " .. search_error)
+		if search_error ~= nil then
+			log.debug("context search failed: " .. search_error)
+		end
 	end
 
 	local git_diff = ""
-	local base_branch = M.find_base_branch(root)
+	local base_branch = opts.base_branch or M.find_base_branch(root)
 	local diff_error = nil
 	local changed_outline = nil
 	local outline_error = nil
@@ -783,12 +851,12 @@ function M.collect_review_context(bufnr, review_mode)
 	end
 
 	return {
-		enabled = search_result ~= nil and search_error == nil,
+		enabled = context_enabled and search_result ~= nil and search_error == nil,
 		root = root,
 		relative_path = relative_path,
-		project_summary = search_error == nil and search_result and search_result.summary or nil,
-		relevant_chunks = search_error == nil and search_result and search_result.results or {},
-		search_engine = search_result and search_result.engine or nil,
+		project_summary = context_enabled and search_error == nil and search_result and search_result.summary or nil,
+		relevant_chunks = context_enabled and search_error == nil and search_result and search_result.results or {},
+		search_engine = context_enabled and search_result and search_result.engine or nil,
 		base_branch = base_branch,
 		git_diff = git_diff,
 		changed_outline = changed_outline and changed_outline.files or {},

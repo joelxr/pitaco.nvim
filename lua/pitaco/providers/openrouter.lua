@@ -51,8 +51,8 @@ function M.build_chat_request(system_prompt, messages, max_tokens, scope)
 	return vim.json.encode(request_table)
 end
 
-function M.prepare_requests(messages, review_mode)
-	return review.build_requests(M, messages, review_mode)
+function M.prepare_requests(messages, review_mode, opts)
+	return review.build_requests(M, messages, review_mode, opts)
 end
 
 function M.request(json_data, callback)

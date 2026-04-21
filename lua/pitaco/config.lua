@@ -419,6 +419,28 @@ function M.should_include_git_diff()
 	return vim.g.pitaco_context_include_git_diff ~= false
 end
 
+function M.get_base_branch()
+	local branch = vim.g.pitaco_base_branch
+	if type(branch) == "string" and vim.trim(branch) ~= "" then
+		return vim.trim(branch)
+	end
+	return nil
+end
+
+function M.get_review_max_diff_requests()
+	local value = vim.g.pitaco_review_max_diff_requests
+	if value == nil or value == false then
+		return nil
+	end
+
+	local number = tonumber(value)
+	if number == nil or number <= 0 then
+		return nil
+	end
+
+	return math.floor(number)
+end
+
 function M.should_auto_index_on_project_open()
 	return vim.g.pitaco_auto_index_on_project_open == true
 end

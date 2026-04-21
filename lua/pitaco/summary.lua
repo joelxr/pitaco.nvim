@@ -163,11 +163,14 @@ local function summary_progress_message(provider_name, model_id)
 	return ("Generating PR summary with %s/%s"):format(provider_name or "unknown", model_id or "unknown")
 end
 
-function M.run()
+function M.run(opts)
+	opts = opts or {}
 	local scope = "summary"
 	local provider = provider_factory.create_provider(config.get_provider(scope), scope)
 	local buffer_number = vim.api.nvim_get_current_buf()
-	local summary_context = context_engine.collect_review_context(buffer_number, "diff")
+	local summary_context = context_engine.collect_review_context(buffer_number, "diff", {
+		base_branch = opts.base_branch,
+	})
 	local diff_text = prompt_context.trim_text(summary_context.git_diff)
 
 	if summary_context.search_error ~= nil then

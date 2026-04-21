@@ -80,6 +80,29 @@ function M.truncate_text(value, max_chars)
 	return vim.trim(text:sub(1, max_chars)) .. "\n...(truncated)"
 end
 
+function M.truncate_text_middle(value, max_chars)
+	if type(value) ~= "string" then
+		return ""
+	end
+
+	local text = vim.trim(value)
+	if max_chars == nil or max_chars <= 0 or #text <= max_chars then
+		return text
+	end
+
+	local marker = "\n...(truncated middle)...\n"
+	local available = max_chars - #marker
+	if available <= 20 then
+		return M.truncate_text(text, max_chars)
+	end
+
+	local head_chars = math.floor(available / 2)
+	local tail_chars = available - head_chars
+	local tail_start = #text - tail_chars + 1
+
+	return vim.trim(text:sub(1, head_chars)) .. marker .. vim.trim(text:sub(tail_start))
+end
+
 function M.build_compact_relevant_chunks(chunks, opts)
 	local max_chunks = opts and opts.max_chunks or 2
 	local max_chars = opts and opts.max_chars or 1200

@@ -55,7 +55,8 @@ local function review_context_progress_message(provider_name, model_id)
 	return ("Preparing review context with %s/%s"):format(provider_name or "unknown", model_id or "unknown")
 end
 
-function M.review(mode)
+function M.review(mode, opts)
+	opts = opts or {}
 	local review_mode = normalize_review_mode(mode)
 	if review_mode == nil then
 		return
@@ -70,7 +71,7 @@ function M.review(mode)
 	)
 	vim.cmd("redraw")
 	vim.schedule(function()
-		local request_bundle = provider.prepare_requests(fewshot.messages, review_mode)
+		local request_bundle = provider.prepare_requests(fewshot.messages, review_mode, opts)
 		requests.make_requests(namespace, provider, request_bundle)
 	end)
 end
@@ -178,8 +179,13 @@ function M.models(scope)
 	model_picker.open(scope)
 end
 
-function M.summary()
-	summary.run()
+function M.summary(base_branch)
+	if type(base_branch) == "string" and vim.trim(base_branch) == "" then
+		base_branch = nil
+	end
+	summary.run({
+		base_branch = base_branch,
+	})
 end
 
 function M.info()

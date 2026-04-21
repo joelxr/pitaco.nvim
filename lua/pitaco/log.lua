@@ -23,6 +23,13 @@ local function notify_file_write_failure(err)
 end
 
 local function append_file(lines)
+	if vim.in_fast_event() then
+		vim.schedule(function()
+			append_file(lines)
+		end)
+		return
+	end
+
 	local path = debug_log_path()
 	local dir = vim.fn.fnamemodify(path, ":h")
 	local ok, err = pcall(function()

@@ -734,8 +734,8 @@ local function collect_test_matches(root, label, candidates, changed_files, time
 	}, nil
 end
 
-function M.collect(bufnr, review_mode)
-	local review_context = context_engine.collect_review_context(bufnr, review_mode)
+function M.collect(bufnr, review_mode, opts)
+	local review_context = context_engine.collect_review_context(bufnr, review_mode, opts)
 	review_context.symbol_usages = {}
 	review_context.file_consumers = {}
 	review_context.related_tests = {}

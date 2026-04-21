@@ -5,7 +5,10 @@ local review_context_builder = require("pitaco.review_context")
 local utils = require("pitaco.utils")
 
 local M = {}
-local MAX_DIFF_SLICE_REQUESTS = 8
+
+local DIFF_SLICE_FILE_EXCERPT_RADIUS = 40
+local DIFF_SLICE_FILE_EXCERPT_MAX_CHARS = 3600
+local DIFF_SLICE_MAX_CHARS = 4000
 
 local function read_file_lines(path)
 	local fd = io.open(path, "r")
@@ -146,6 +149,107 @@ local function parse_diff_slices(diff_text)
 
 	flush_hunk()
 	return slices
+end
+
+local function is_test_path(path)
+	local normalized = normalize_relative_path(path) or ""
+	return normalized:match("(^|/)__tests__/") ~= nil
+		or normalized:match("(^|/)tests?/") ~= nil
+		or normalized:match("%.spec%.") ~= nil
+		or normalized:match("%.test%.") ~= nil
+end
+
+local function is_low_signal_path(path)
+	local normalized = normalize_relative_path(path) or ""
+	return normalized:match("^docs?/") ~= nil
+		or normalized:match("%.md$") ~= nil
+		or normalized:match("package%-lock%.json$") ~= nil
+		or normalized:match("pnpm%-lock%.yaml$") ~= nil
+		or normalized:match("yarn%.lock$") ~= nil
+end
+
+local function prioritized_diff_slices(slices)
+	local prioritized = {}
+	for index, slice in ipairs(slices or {}) do
+		slice._pitaco_original_index = index
+		table.insert(prioritized, slice)
+	end
+
+	table.sort(prioritized, function(left, right)
+		local left_priority = 0
+		local right_priority = 0
+
+		if is_test_path(left.file) then
+			left_priority = left_priority + 10
+		end
+		if is_test_path(right.file) then
+			right_priority = right_priority + 10
+		end
+		if is_low_signal_path(left.file) then
+			left_priority = left_priority + 20
+		end
+		if is_low_signal_path(right.file) then
+			right_priority = right_priority + 20
+		end
+
+		if left_priority ~= right_priority then
+			return left_priority < right_priority
+		end
+
+		return (left._pitaco_original_index or 0) < (right._pitaco_original_index or 0)
+	end)
+
+	return prioritized
+end
+
+local function select_diff_slices(slices, max_slices)
+	local limit = max_slices
+	local selected = {}
+	local selected_keys = {}
+	local seen_files = {}
+	local prioritized = prioritized_diff_slices(slices)
+
+	local function slice_key(slice)
+		local range = slice.range or {}
+		return table.concat({
+			slice.file or "",
+			tostring(range.startLine or ""),
+			tostring(range.endLine or ""),
+			tostring(slice._pitaco_original_index or ""),
+		}, ":")
+	end
+
+	local function add_slice(slice)
+		if limit ~= nil and #selected >= limit then
+			return
+		end
+		local key = slice_key(slice)
+		if selected_keys[key] then
+			return
+		end
+		selected_keys[key] = true
+		table.insert(selected, slice)
+	end
+
+	for _, slice in ipairs(prioritized) do
+		if limit ~= nil and #selected >= limit then
+			break
+		end
+		local file = normalize_relative_path(slice.file)
+		if file ~= nil and not seen_files[file] and not is_test_path(file) and not is_low_signal_path(file) then
+			seen_files[file] = true
+			add_slice(slice)
+		end
+	end
+
+	for _, slice in ipairs(prioritized) do
+		if limit ~= nil and #selected >= limit then
+			break
+		end
+		add_slice(slice)
+	end
+
+	return selected
 end
 
 local function build_prompt_header(review_mode)
@@ -290,13 +394,19 @@ local function build_diff_slice_prompt(review_context, slice)
 		("Changed file: %s"):format(slice.file or "unknown"),
 	}
 
-	local file_excerpt = build_numbered_file_excerpt(review_context.root, slice.file, slice.range, 16)
+	local file_excerpt = build_numbered_file_excerpt(
+		review_context.root,
+		slice.file,
+		slice.range,
+		DIFF_SLICE_FILE_EXCERPT_RADIUS
+	)
 
 	table.insert(sections, "")
 	table.insert(sections, "Use this order of evidence:")
 	table.insert(sections, "1. Diff slice")
 	table.insert(sections, "2. Focused file excerpt")
 	table.insert(sections, "3. Optional consumers/tests/usages only to confirm impact")
+	table.insert(sections, "When a changed condition, guard, return, or wrapper is added, inspect later unchanged lines in the focused excerpt for side effects that may now be skipped.")
 
 	local changed_entry = changed_outline_for_file(review_context.changed_outline, slice.file)
 	if changed_entry ~= nil then
@@ -312,7 +422,7 @@ local function build_diff_slice_prompt(review_context, slice)
 		table.insert(sections, "")
 		table.insert(sections, "Focused file excerpt:")
 		table.insert(sections, "```text")
-		table.insert(sections, prompt_context.truncate_text(file_excerpt, 1800))
+		table.insert(sections, prompt_context.truncate_text_middle(file_excerpt, DIFF_SLICE_FILE_EXCERPT_MAX_CHARS))
 		table.insert(sections, "```")
 	end
 
@@ -352,7 +462,7 @@ local function build_diff_slice_prompt(review_context, slice)
 	table.insert(sections, "")
 	table.insert(sections, "Diff slice:")
 	table.insert(sections, "```diff")
-	table.insert(sections, prompt_context.truncate_text(slice.text or "", 2200))
+	table.insert(sections, prompt_context.truncate_text_middle(slice.text or "", DIFF_SLICE_MAX_CHARS))
 	table.insert(sections, "```")
 
 	local additional_instruction = prompt_context.trim_text(config.get_review_additional_instruction())
@@ -429,12 +539,15 @@ local function build_branch_pass_prompt(review_context)
 	return table.concat(sections, "\n")
 end
 
-function M.build_requests(provider, fewshot_messages, review_mode)
+function M.build_requests(provider, fewshot_messages, review_mode, opts)
+	opts = opts or {}
 	local buffer_number = utils.get_buffer_number()
 	local buffer_path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buffer_number), ":p")
 	local lines = vim.api.nvim_buf_get_lines(buffer_number, 0, -1, false)
 	local mode = review_mode == "file" and "file" or "diff"
-	local review_context = review_context_builder.collect(buffer_number, mode)
+	local review_context = review_context_builder.collect(buffer_number, mode, {
+		base_branch = opts.base_branch,
+	})
 	local diff_text = prompt_context.trim_text(review_context.git_diff)
 
 	if review_context.search_error ~= nil then
@@ -457,19 +570,21 @@ function M.build_requests(provider, fewshot_messages, review_mode)
 			role = "user",
 			content = build_user_prompt(review_context, file_chunk, mode),
 		})
-		table.insert(requests, provider.build_chat_request(config.get_system_prompt(), messages, 2048))
+		table.insert(requests, provider.build_chat_request(config.get_system_prompt(), messages, 2048, "review"))
 	else
-		local slices = parse_diff_slices(review_context.git_diff)
+		local max_diff_requests = config.get_review_max_diff_requests()
+		local all_slices = parse_diff_slices(review_context.git_diff)
+		local slices = select_diff_slices(all_slices, max_diff_requests)
+		if max_diff_requests ~= nil and #all_slices > #slices then
+			log.debug(("review diff request cap applied: max=%d skipped=%d"):format(max_diff_requests, #all_slices - #slices))
+		end
 		for index, slice in ipairs(slices) do
-			if index > MAX_DIFF_SLICE_REQUESTS then
-				break
-			end
 			local messages = vim.deepcopy(fewshot_messages or {})
 			table.insert(messages, {
 				role = "user",
 				content = build_diff_slice_prompt(review_context, slice),
 			})
-			table.insert(requests, provider.build_chat_request(config.get_system_prompt(), messages, 2048))
+			table.insert(requests, provider.build_chat_request(config.get_system_prompt(), messages, 2048, "review"))
 		end
 
 		local branch_messages = vim.deepcopy(fewshot_messages or {})
@@ -477,7 +592,7 @@ function M.build_requests(provider, fewshot_messages, review_mode)
 			role = "user",
 			content = build_branch_pass_prompt(review_context),
 		})
-		table.insert(requests, provider.build_chat_request(config.get_system_prompt(), branch_messages, 2048))
+		table.insert(requests, provider.build_chat_request(config.get_system_prompt(), branch_messages, 2048, "review"))
 	end
 
 	local content_source = mode == "diff" and diff_text or table.concat(lines, "\n")

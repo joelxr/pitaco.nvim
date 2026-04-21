@@ -21,9 +21,9 @@ if vim.g.pitaco_commit_keymap ~= nil and vim.g.pitaco_commit_keymap ~= "" then
 end
 
 vim.api.nvim_create_user_command("PitacoReview", function(opts)
-	commands.review(opts.fargs[1] or "diff")
+	commands.review(opts.fargs[1] or "diff", { base_branch = opts.fargs[2] })
 end, {
-	nargs = "?",
+	nargs = "*",
 	complete = function()
 		return { "diff", "file" }
 	end,
@@ -38,9 +38,9 @@ vim.api.nvim_create_user_command("Pitaco", function(opts)
 	local action = opts.fargs[1] or "review" -- Default to 'review' if no subcommand is given
 
 	if action == "review" then
-		commands.review(opts.fargs[2] or "diff")
+		commands.review(opts.fargs[2] or "diff", { base_branch = opts.fargs[3] })
 	elseif action == "diff" then
-		commands.review("diff")
+		commands.review("diff", { base_branch = opts.fargs[2] })
 	elseif action == "file" then
 		commands.review("file")
 	elseif action == "clear" then
@@ -60,7 +60,7 @@ vim.api.nvim_create_user_command("Pitaco", function(opts)
 	elseif action == "models" then
 		commands.models(opts.fargs[2])
 	elseif action == "summary" then
-		commands.summary()
+		commands.summary(opts.fargs[2])
 	elseif action == "info" or action == "settings" then
 		commands.info()
 	elseif action == "debug" then
@@ -103,6 +103,21 @@ end, {
 
 		if line:match("^%s*Pitaco%s+debug%s+") then
 			return { "on", "off", "toggle" }
+		end
+
+		if line:match("^%s*Pitaco%s+review%s+") then
+			if line:match("^%s*Pitaco%s+review%s+diff%s+") then
+				return { "main", "master", "origin/main", "origin/master" }
+			end
+			return { "diff", "file" }
+		end
+
+		if line:match("^%s*Pitaco%s+diff%s+") then
+			return { "main", "master", "origin/main", "origin/master" }
+		end
+
+		if line:match("^%s*Pitaco%s+summary%s+") then
+			return { "main", "master", "origin/main", "origin/master" }
 		end
 
 		return items

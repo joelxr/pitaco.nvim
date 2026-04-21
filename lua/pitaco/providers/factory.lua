@@ -43,8 +43,8 @@ function M.create_provider(provider_name, scope)
 	provider.build_chat_request = function(system_prompt, messages, max_tokens)
 		return base.build_chat_request(system_prompt, messages, max_tokens, scope)
 	end
-	provider.prepare_requests = function(messages, review_mode)
-		return review.build_requests(provider, messages, review_mode)
+	provider.prepare_requests = function(messages, review_mode, opts)
+		return review.build_requests(provider, messages, review_mode, opts)
 	end
 
 	return provider
